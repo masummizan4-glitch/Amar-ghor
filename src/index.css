@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-bengali: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-english: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  [data-bn-font="hind"] {
+    --font-bengali: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  [data-bn-font="noto"] {
+    --font-bengali: 'Noto Sans Bengali', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  [data-bn-font="anek"] {
+    --font-bengali: 'Anek Bangla', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  [data-bn-font="tiro"] {
+    --font-bengali: 'Tiro Bangla', Georgia, serif;
+  }
+
+  body {
+    font-family: var(--font-bengali);
+    background-color: #FAF8F5;
+    color: #1F2937;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1ECE1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #A3B899;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2D6A4F;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Card hover glow */
+.card-hover-shadow {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.card-hover-shadow:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px -10px rgba(19, 62, 43, 0.12);
+}
+
+/* Bengali number styling */
+.bn-num {
+  font-feature-settings: "tnum";
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

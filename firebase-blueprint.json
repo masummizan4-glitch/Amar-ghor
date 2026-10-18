@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An authentic food or home decor product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nameBn": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "category": { "type": "string" },
+        "categoryBn": { "type": "string" },
+        "categoryEn": { "type": "string" },
+        "price": { "type": "number" },
+        "previousPrice": { "type": "number" },
+        "unit": { "type": "string" },
+        "unitBn": { "type": "string" },
+        "inStock": { "type": "boolean" },
+        "stockCount": { "type": "number" },
+        "descriptionBn": { "type": "string" },
+        "descriptionEn": { "type": "string" },
+        "images": { "type": "array" },
+        "weightOptions": { "type": "array" }
+      },
+      "required": ["id", "nameBn", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order with shipping and items breakdown",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "total": { "type": "number" },
+        "deliveryCharge": { "type": "number" }
+      },
+      "required": ["id", "orderNumber", "status"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Store contact and configuration settings",
+      "type": "object",
+      "properties": {
+        "brandNameBn": { "type": "string" },
+        "brandNameEn": { "type": "string" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store products catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/settings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Store operational settings"
+    }
+  }
+}

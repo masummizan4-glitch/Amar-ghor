@@ -1,0 +1,6 @@
+{
+  "name": "আমার ঘর Online | Amar Ghor Online",
+  "description": "আপন ঘরের মতো নিরাপদ - Authentic Food & Home Decor e-commerce store in Bangladesh with Bengali & English support, natural honey, pure ghee, mustard oil, nuts, and home decor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
