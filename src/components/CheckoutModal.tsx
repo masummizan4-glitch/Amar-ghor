@@ -45,8 +45,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   settings,
   onUpdateQuantity
 }) => {
-  if (!isOpen) return null;
-
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -214,6 +212,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">

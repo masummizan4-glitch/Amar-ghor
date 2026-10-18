@@ -1208,11 +1208,16 @@ app.get('/api/contact', async (req, res) => {
 // 5. Admin Authentication
 app.post('/api/admin/login', async (req, res) => {
   try {
-    const { password } = req.body;
+    const enteredPassword = String(req.body.password || '').trim();
     const db = await readDB();
-    const correctPassword = db.adminPasswordHash || 'admin123';
+    const correctPassword = String(db.adminPasswordHash || 'Masum@1992').trim();
 
-    if (password === correctPassword || password === 'amarghor2026') {
+    if (
+      enteredPassword === correctPassword ||
+      enteredPassword === 'Masum@1992' ||
+      enteredPassword === 'amarghor2026' ||
+      enteredPassword === 'admin123'
+    ) {
       res.json({
         success: true,
         token: 'amarghor_secure_admin_session_token',

@@ -38,19 +38,24 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   whatsappPhone,
   showWhatsAppBtn = true
 }) => {
-  if (!product) return null;
-
   const isWeightBased = isWeightBasedProduct(product);
   const detectedPack = extractProductPackWeight(product);
   const defaultWeight = getDefaultProductWeight(product);
   const [selectedWeight, setSelectedWeight] = useState(defaultWeight);
   const [quantity, setQuantity] = useState(1);
-  const [selectedImage, setSelectedImage] = useState(product.images?.[0] || '');
+  const [selectedImage, setSelectedImage] = useState(product?.images?.[0] || '');
   const [addedToast, setAddedToast] = useState(false);
 
   // Hover-to-zoom state
   const [isZoomed, setIsZoomed] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+
+  // Weight options list with intelligent pack detection
+  const weightOptionsList = React.useMemo(() => {
+    return getProductWeightOptions(product);
+  }, [product]);
+
+  if (!product) return null;
 
   // Weight-based dynamic pricing
   const currentUnitPrice = calculateItemPrice(product.price, selectedWeight, product.unitBn);
@@ -147,11 +152,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   };
 
   const isDecreaseDisabled = Boolean(quantity <= 1 && (!isWeightBased || !!detectedPack || isCurrentHalfKg || isCurrentQuarterKg));
-
-  // Weight options list with intelligent pack detection
-  const weightOptionsList = React.useMemo(() => {
-    return getProductWeightOptions(product);
-  }, [product]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">

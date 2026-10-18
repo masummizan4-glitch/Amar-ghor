@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
-import { Product, SiteSettings, Order } from '../types';
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs } from 'firebase/firestore';
+import { Product, SiteSettings, Order, ContactMessage, BlacklistEntry } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let firestoreInstance: any = null;
@@ -179,6 +179,199 @@ export async function saveImageToCloud(id: string, dataUrl: string, contentType:
     return true;
   } catch (err: any) {
     console.warn('[ClientFirebase] saveImageToCloud failed:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Verify admin password directly with Cloud Firestore or Master Passwords
+ * (Allows logging in on Netlify, serverless hosts, or offline)
+ */
+export async function verifyAdminPasswordInCloud(password: string): Promise<boolean> {
+  const cleanPass = String(password || '').trim();
+  if (!cleanPass) return false;
+
+  // Master recovery passwords
+  if (cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123') {
+    return true;
+  }
+
+  const db = getClientFirestoreDb();
+  if (!db) {
+    return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123';
+  }
+
+  try {
+    const secRef = doc(db, 'app_store', 'security');
+    const snap = await getDoc(secRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const stored = String(data?.adminPasswordHash || '').trim();
+      if (stored && cleanPass === stored) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[ClientFirebase] verifyAdminPasswordInCloud error:', err);
+  }
+
+  return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123';
+}
+
+/**
+ * Load orders from Cloud Firestore
+ */
+export async function loadOrdersFromCloud(): Promise<Order[]> {
+  const db = getClientFirestoreDb();
+  if (!db) return [];
+
+  try {
+    const storeRef = doc(db, 'app_store', 'orders');
+    const snap = await getDoc(storeRef);
+    if (snap.exists()) {
+      const items = snap.data()?.items;
+      if (Array.isArray(items) && items.length > 0) {
+        return items as Order[];
+      }
+    }
+
+    // Also check dedicated collection 'orders'
+    const colRef = collection(db, 'orders');
+    const colSnap = await getDocs(colRef);
+    if (!colSnap.empty) {
+      const list: Order[] = [];
+      colSnap.forEach((d) => {
+        list.push(d.data() as Order);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return list;
+    }
+
+    return [];
+  } catch (err: any) {
+    console.warn('[ClientFirebase] loadOrdersFromCloud error:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Load contact messages from Cloud Firestore
+ */
+export async function loadMessagesFromCloud(): Promise<ContactMessage[]> {
+  const db = getClientFirestoreDb();
+  if (!db) return [];
+
+  try {
+    const colRef = collection(db, 'contacts');
+    const colSnap = await getDocs(colRef);
+    if (!colSnap.empty) {
+      const list: ContactMessage[] = [];
+      colSnap.forEach((d) => {
+        list.push({ id: d.id, ...(d.data() as any) });
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      return list;
+    }
+
+    const secRef = doc(db, 'app_store', 'security');
+    const snap = await getDoc(secRef);
+    if (snap.exists() && Array.isArray(snap.data()?.contacts)) {
+      return snap.data()?.contacts;
+    }
+    return [];
+  } catch (err: any) {
+    console.warn('[ClientFirebase] loadMessagesFromCloud error:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Load blacklist from Cloud Firestore
+ */
+export async function loadBlacklistFromCloud(): Promise<BlacklistEntry[]> {
+  const db = getClientFirestoreDb();
+  if (!db) return [];
+
+  try {
+    const secRef = doc(db, 'app_store', 'security');
+    const snap = await getDoc(secRef);
+    if (snap.exists() && Array.isArray(snap.data()?.blacklist)) {
+      return snap.data()?.blacklist;
+    }
+    return [];
+  } catch (err: any) {
+    console.warn('[ClientFirebase] loadBlacklistFromCloud error:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Save blacklist to Cloud Firestore
+ */
+export async function saveBlacklistToCloud(blacklist: BlacklistEntry[]): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const secRef = doc(db, 'app_store', 'security');
+    await setDoc(secRef, { blacklist, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] saveBlacklistToCloud error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Update order status in Cloud Firestore
+ */
+export async function updateOrderStatusInCloud(orderId: string, status: string, paymentStatus?: string): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const orderDocRef = doc(db, 'orders', orderId);
+    const updateData: any = { status, updatedAt: new Date().toISOString() };
+    if (paymentStatus) updateData.paymentStatus = paymentStatus;
+    await setDoc(orderDocRef, updateData, { merge: true });
+
+    const storeRef = doc(db, 'app_store', 'orders');
+    const snap = await getDoc(storeRef);
+    if (snap.exists()) {
+      const items: Order[] = snap.data()?.items || [];
+      const updated = items.map((o) => {
+        if (o.orderId === orderId) {
+          return {
+            ...o,
+            status: status as any,
+            paymentStatus: (paymentStatus || o.paymentStatus) as any,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return o;
+      });
+      await setDoc(storeRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] updateOrderStatusInCloud error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Change admin password in Cloud Firestore
+ */
+export async function changeAdminPasswordInCloud(newPassword: string): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const secRef = doc(db, 'app_store', 'security');
+    await setDoc(secRef, { adminPasswordHash: newPassword, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] changeAdminPasswordInCloud error:', err?.message || err);
     return false;
   }
 }
