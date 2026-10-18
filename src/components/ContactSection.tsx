@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Phone, MessageCircle, Mail, MapPin, Clock, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
+import { saveContactToCloud } from '../lib/clientFirebase';
 
 interface ContactSectionProps {
   lang: Language;
@@ -30,22 +31,36 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang, settings }
     setLoading(true);
 
     try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, email, message })
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'বার্তা পাঠানো সম্ভব হয়নি।');
+      let sent = false;
+      try {
+        const res = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone, email, message })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) sent = true;
+        }
+      } catch (e) {
+        console.warn('API /api/contact unreachable, saving to cloud:', e);
       }
 
-      setSuccess(true);
-      setName('');
-      setPhone('');
-      setEmail('');
-      setMessage('');
+      if (!sent) {
+        // Fallback directly to Cloud Firestore (Netlify / serverless support)
+        await saveContactToCloud({ name, phone, email, message });
+        sent = true;
+      }
+
+      if (sent) {
+        setSuccess(true);
+        setName('');
+        setPhone('');
+        setEmail('');
+        setMessage('');
+      } else {
+        throw new Error('বার্তা পাঠানো সম্ভব হয়নি।');
+      }
     } catch (err: any) {
       setError(err.message || 'একটি ত্রুটি ঘটেছে। আবার চেষ্টা করুন।');
     } finally {

@@ -20,6 +20,8 @@ import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X } from 'lucide-react';
 import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight } from './utils/formatters';
+import { INITIAL_PRODUCTS } from './data/defaultProducts';
+import { loadProductsFromCloud, loadSettingsFromCloud } from './lib/clientFirebase';
 
 const DEFAULT_SITE_SETTINGS: SiteSettings = {
   brandNameBn: 'আমার ঘর Online',
@@ -129,8 +131,8 @@ export default function App() {
   };
 
   // Products & Categories
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -155,28 +157,70 @@ export default function App() {
     localStorage.setItem('amarghor_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // Fetch Products & Settings from API
+  // Fetch Products & Settings from API, Cloud Firestore, or Static Fallback
   const loadData = async () => {
-    setLoadingProducts(true);
     try {
-      const [prodRes, settRes] = await Promise.all([
-        fetch('/api/products'),
-        fetch('/api/settings')
-      ]);
+      let fetchedProds: Product[] | null = null;
+      let fetchedSett: Partial<SiteSettings> | null = null;
 
-      if (prodRes.ok) {
-        const prodData = await prodRes.json();
-        if (Array.isArray(prodData) && prodData.length > 0) {
-          setProducts(prodData);
+      // 1. First attempt Node / Express backend API (Cloud Run / VPS / Local Dev)
+      try {
+        const [prodRes, settRes] = await Promise.all([
+          fetch('/api/products').catch(() => null),
+          fetch('/api/settings').catch(() => null)
+        ]);
+
+        if (prodRes && prodRes.ok) {
+          const contentType = prodRes.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const prodData = await prodRes.json();
+            if (Array.isArray(prodData) && prodData.length > 0) {
+              fetchedProds = prodData;
+            }
+          }
+        }
+
+        if (settRes && settRes.ok) {
+          const contentType = settRes.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const settData = await settRes.json();
+            if (settData && typeof settData === 'object') {
+              fetchedSett = settData;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[App] Express API unreachable, checking cloud/static:', e);
+      }
+
+      // 2. If API was unavailable (e.g. running statically on Netlify), query Cloud Firestore directly
+      if (!fetchedProds || fetchedProds.length === 0) {
+        const cloudProds = await loadProductsFromCloud().catch(() => null);
+        if (cloudProds && cloudProds.length > 0) {
+          fetchedProds = cloudProds;
         }
       }
 
-      if (settRes.ok) {
-        const settData = await settRes.json();
-        setSettings((prev) => ({ ...prev, ...settData }));
+      if (!fetchedSett) {
+        const cloudSett = await loadSettingsFromCloud().catch(() => null);
+        if (cloudSett) {
+          fetchedSett = cloudSett;
+        }
+      }
+
+      // 3. Apply state
+      if (fetchedProds && fetchedProds.length > 0) {
+        setProducts(fetchedProds);
+      } else {
+        setProducts(INITIAL_PRODUCTS);
+      }
+
+      if (fetchedSett) {
+        setSettings((prev) => ({ ...prev, ...fetchedSett }));
       }
     } catch (err) {
-      console.warn('API fetch warning, using local fallback:', err);
+      console.warn('loadData fallback error:', err);
+      setProducts(INITIAL_PRODUCTS);
     } finally {
       setLoadingProducts(false);
     }

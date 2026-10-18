@@ -13,6 +13,7 @@ import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOpti
 import { CATEGORIES } from './CategoryBar';
 import { BrandLogo } from './BrandLogo';
 import { BD_DISTRICTS } from './CheckoutModal';
+import { saveProductsToCloud, saveSettingsToCloud, saveImageToCloud } from '../lib/clientFirebase';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -517,18 +518,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
       }
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminToken: token,
-          product: productToSave
-        })
-      });
+      let saved = false;
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            product: productToSave
+          })
+        });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'পণ্য সংরক্ষণ করা সম্ভব হয়নি।');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) saved = true;
+        }
+      } catch (e) {
+        console.warn('API /api/products save unreachable, saving to Cloud Firestore:', e);
+      }
+
+      // If backend was unreachable or on Netlify, update products and sync directly to Cloud Firestore
+      if (!saved) {
+        let updatedList: Product[];
+        const exists = products.some((p) => p.id === productToSave.id);
+        if (exists) {
+          updatedList = products.map((p) => (p.id === productToSave.id ? (productToSave as Product) : p));
+        } else {
+          updatedList = [productToSave as Product, ...products];
+        }
+        await saveProductsToCloud(updatedList).catch((e) => console.warn('Cloud product sync warning:', e));
       }
 
       setEditingProduct(null);
@@ -545,13 +563,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!confirm('আপনি কি নিশ্চিত যে এই পণ্যটি মুছে ফেলতে চান?')) return;
 
     try {
-      const res = await fetch(`/api/products/${productId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        onRefreshProducts();
+      let deletedOnServer = false;
+      try {
+        const res = await fetch(`/api/products/${productId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) deletedOnServer = true;
+      } catch (e) {
+        console.warn('Backend delete unreachable:', e);
       }
+
+      // Sync to cloud Firestore directly
+      const remaining = products.filter((p) => p.id !== productId);
+      await saveProductsToCloud(remaining).catch(() => {});
+      onRefreshProducts();
     } catch (err) {
       console.error('Delete failed:', err);
     }
@@ -596,24 +622,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     setUploadingImage(true);
     try {
-      const compressedDataUrl = await compressImageFile(file, 1200, 0.85);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminToken: token,
-          dataUrl: compressedDataUrl,
-          fileName: file.name
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.url) {
+      // Compress to optimal dimensions so base64 never exceeds Firestore 1MB quota
+      const compressedDataUrl = await compressImageFile(file, 900, 0.78);
+      let uploadedUrl = '';
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            dataUrl: compressedDataUrl,
+            fileName: file.name
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.url) {
+            uploadedUrl = data.url;
+          }
+        }
+      } catch (err) {
+        console.warn('Backend upload unreachable, saving directly to Cloud Firestore:', err);
+      }
+
+      // If backend was unreachable (e.g. Netlify deployment), save directly to Firestore
+      if (!uploadedUrl) {
+        const imageId = 'img_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        await saveImageToCloud(imageId, compressedDataUrl);
+        uploadedUrl = compressedDataUrl;
+      }
+
+      if (uploadedUrl) {
         setEditingProduct((prev) => ({
           ...prev,
-          images: [...(prev?.images || []), data.url]
+          images: [...(prev?.images || []), uploadedUrl]
         }));
       } else {
-        throw new Error(data.error || 'Upload error');
+        throw new Error('ইমেজ সংরক্ষণ সম্ভব হয়নি।');
       }
     } catch (err: any) {
       console.error('Upload failed:', err);
@@ -624,43 +670,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Logo Upload handler (File -> Base64 -> /api/upload)
+  // Logo Upload handler (File -> Base64 -> Cloud & Disk)
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadingLogo(true);
     try {
-      const compressedDataUrl = await compressImageFile(file, 600, 0.9);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminToken: token,
-          dataUrl: compressedDataUrl,
-          fileName: 'logo-' + file.name
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.url) {
+      const compressedDataUrl = await compressImageFile(file, 500, 0.85);
+      let logoUrl = '';
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            dataUrl: compressedDataUrl,
+            fileName: 'logo-' + file.name
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.url) {
+            logoUrl = data.url;
+          }
+        }
+      } catch (err) {
+        console.warn('Backend upload unreachable for logo, saving to cloud:', err);
+      }
+
+      if (!logoUrl) {
+        const logoId = 'logo_' + Date.now();
+        await saveImageToCloud(logoId, compressedDataUrl);
+        logoUrl = compressedDataUrl;
+      }
+
+      if (logoUrl) {
         const updated = {
           ...settingsForm,
-          logoUrl: data.url
+          logoUrl
         };
         setSettingsForm(updated);
+        onUpdateSettings({ logoUrl });
+        await saveSettingsToCloud({ logoUrl }).catch(() => {});
 
-        // Auto save updated logo to settings
-        const saveRes = await fetch('/api/settings', {
+        // Try server settings update if available
+        fetch('/api/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             adminToken: token,
-            settings: { logoUrl: data.url }
+            settings: { logoUrl }
           })
-        });
-        if (saveRes.ok) {
-          onUpdateSettings({ logoUrl: data.url });
-        }
+        }).catch(() => {});
       }
     } catch (err: any) {
       console.error('Logo upload failed:', err);
@@ -678,20 +741,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setSettingsSuccess(false);
 
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminToken: token,
-          settings: settingsForm
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        onUpdateSettings(data.settings);
-        setSettingsSuccess(true);
-        setTimeout(() => setSettingsSuccess(false), 3000);
+      let saved = false;
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: token,
+            settings: settingsForm
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            onUpdateSettings(data.settings);
+            saved = true;
+          }
+        }
+      } catch (e) {
+        console.warn('Backend settings save unreachable, saving to cloud:', e);
       }
+
+      // Always persist to Cloud Firestore for permanent multi-platform availability
+      await saveSettingsToCloud(settingsForm).catch((e) => console.warn('Cloud settings sync warning:', e));
+
+      onUpdateSettings(settingsForm);
+      setSettingsSuccess(true);
+      setTimeout(() => setSettingsSuccess(false), 3000);
     } catch (err) {
       console.error('Settings save failed:', err);
     } finally {

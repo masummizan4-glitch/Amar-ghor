@@ -4,6 +4,7 @@ import { CartItem, Language, SiteSettings, Order } from '../types';
 import { formatPrice, toBnNumber, calculateItemPrice, formatWeightLabel, isWeightBasedProduct, getProductWeightOptions, extractProductPackWeight } from '../utils/formatters';
 import { calculateDeliveryCharge } from '../utils/delivery';
 import { BrandLogo } from './BrandLogo';
+import { saveOrderToCloud } from '../lib/clientFirebase';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -107,40 +108,102 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer: {
-            name,
-            phone,
-            email,
-            address,
-            district,
-            notes
-          },
-          items: items.map((i) => ({
-            id: i.product.id,
-            nameBn: i.product.nameBn,
-            quantity: i.quantity,
-            selectedWeight: i.selectedWeight
-          })),
+      let createdOrderObj: Order | null = null;
+      const orderPayload = {
+        customer: {
+          name,
+          phone,
+          email,
+          address,
           district,
-          paymentMethod,
-          transactionId,
-          notes,
-          manualDeliveryCharge: deliveryCharge
-        })
-      });
+          notes
+        },
+        items: items.map((i) => ({
+          id: i.product.id,
+          nameBn: i.product.nameBn,
+          quantity: i.quantity,
+          selectedWeight: i.selectedWeight
+        })),
+        district,
+        paymentMethod,
+        transactionId,
+        notes,
+        manualDeliveryCharge: deliveryCharge
+      };
 
-      const data = await response.json();
+      try {
+        const response = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'অর্ডার সাবমিট করতে সমস্যা হয়েছে।');
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data.success && data.order) {
+              createdOrderObj = data.order;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('API /api/orders failed, switching to cloud/local fallback:', e);
       }
 
-      setCreatedOrder(data.order);
-      onOrderSuccess(data.order);
+      // If backend was unreachable (e.g. running statically on Netlify), construct order and save to Firestore
+      if (!createdOrderObj) {
+        const orderNumber = 'AGO-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
+        createdOrderObj = {
+          orderId: 'ord-' + Date.now(),
+          orderNumber,
+          createdAt: new Date().toISOString(),
+          status: 'pending',
+          customer: {
+            name: name.trim(),
+            phone: phone.trim(),
+            email: email.trim(),
+            address: address.trim(),
+            district,
+            notes: notes.trim()
+          },
+          items: items.map((i) => {
+            const unitPrice = calculateItemPrice(i.product.price, i.selectedWeight, i.product.unitBn);
+            return {
+              id: i.product.id,
+              nameBn: i.product.nameBn,
+              nameEn: i.product.nameEn,
+              price: unitPrice,
+              unit: i.product.unit,
+              unitBn: i.product.unitBn,
+              quantity: i.quantity,
+              selectedWeight: i.selectedWeight,
+              total: unitPrice * i.quantity,
+              image: i.product.images?.[0] || ''
+            };
+          }),
+          subtotal,
+          deliveryCharge,
+          total: grandTotal,
+          paymentMethod,
+          transactionId,
+          paymentStatus: paymentMethod === 'cod' ? 'unpaid' : 'pending_verification'
+        };
+
+        // Persist to Cloud Firestore so store owner receives the order
+        await saveOrderToCloud(createdOrderObj).catch((e) => console.warn('Cloud order write error:', e));
+
+        // Also cache in customer's local storage
+        try {
+          const savedOrders = JSON.parse(localStorage.getItem('amarghor_orders') || '[]');
+          localStorage.setItem('amarghor_orders', JSON.stringify([createdOrderObj, ...savedOrders]));
+        } catch {}
+      }
+
+      if (createdOrderObj) {
+        setCreatedOrder(createdOrderObj);
+        onOrderSuccess(createdOrderObj);
+      }
     } catch (err: any) {
       setError(err.message || 'একটি ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {

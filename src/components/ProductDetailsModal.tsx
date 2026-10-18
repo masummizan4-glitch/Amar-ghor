@@ -11,7 +11,8 @@ import {
   isWeightBasedProduct,
   extractProductPackWeight,
   getProductWeightOptions,
-  getDefaultProductWeight
+  getDefaultProductWeight,
+  resolveImageUrl
 } from '../utils/formatters';
 
 interface ProductDetailsModalProps {
@@ -183,7 +184,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 onTouchEnd={() => setIsZoomed(false)}
               >
                 <img
-                  src={selectedImage || product.images?.[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80'}
+                  src={resolveImageUrl(selectedImage || product.images?.[0])}
                   alt={product.nameBn}
                   className="w-full h-full object-cover will-change-transform pointer-events-none"
                   style={{
@@ -236,7 +237,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                         selectedImage === img ? 'border-[#2D6A4F] shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
                       }`}
                     >
-                      <img src={img} alt="thumbnail" className="w-full h-full object-cover" />
+                      <img src={resolveImageUrl(img)} alt="thumbnail" className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>

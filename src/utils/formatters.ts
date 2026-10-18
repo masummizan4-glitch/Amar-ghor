@@ -52,6 +52,17 @@ export function createWhatsAppCartUrl(phone: string, items: Array<{ nameBn: stri
 }
 
 /**
+ * Resolves product image URLs, normalizing legacy /api/images/ to /uploads/ for Netlify and static deployments.
+ */
+export function resolveImageUrl(url?: string): string {
+  if (!url) return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80';
+  if (url.startsWith('/api/images/')) {
+    return url.replace('/api/images/', '/uploads/');
+  }
+  return url;
+}
+
+/**
  * Parses weight multiplier from selected packaging size string (e.g. 450g -> 0.45, 500g -> 0.5, 2kg -> 2.0).
  * If the product is non-weight based (e.g. Piece/Standard Size), returns 1.0.
  */

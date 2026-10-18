@@ -11,7 +11,8 @@ import {
   isWeightBasedProduct,
   extractProductPackWeight,
   getProductWeightOptions,
-  getDefaultProductWeight
+  getDefaultProductWeight,
+  resolveImageUrl
 } from '../utils/formatters';
 
 interface ProductCardProps {
@@ -46,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const cardUnitPrice = calculateItemPrice(product.price, selectedWeight, product.unitBn);
   const cardPreviousPrice = calculateItemPrice(product.previousPrice, selectedWeight, product.unitBn);
   const discountPercent = calculateDiscount(cardUnitPrice, cardPreviousPrice);
-  const primaryImage = product.images?.[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80';
+  const primaryImage = resolveImageUrl(product.images?.[0]);
 
   const whatsappUrl = createWhatsAppProductUrl(
     whatsappPhone,

@@ -1,0 +1,475 @@
+[
+  {
+    "category": "dates",
+    "inStock": true,
+    "unit": "Per kg",
+    "id": "prod-1792301054072",
+    "categoryBn": "খেজুর",
+    "price": 1100,
+    "descriptionEn": "",
+    "nameBn": "স্পেশাল সৌদিয়া সুগাই খেজুর",
+    "createdAt": "2026-10-18T05:24:14.072Z",
+    "nameEn": "Special Soudia Sgai Khejur",
+    "descriptionBn": "সৌদি আরবের বিখ্যাত সুগাই খেজুর। মুখে দিলেই গলে যাওয়া নরম গঠন এবং প্রাকৃতিক মিষ্টি স্বাদের জন্য সবার প্রিয়।",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "stockCount": 50,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "/uploads/img_1792301036234_04tzdk.jpeg",
+      "/uploads/soudia_sugai_dates.jpg"
+    ],
+    "categoryEn": "Premium Dates",
+    "weightKg": 1,
+    "previousPrice": 1250
+  },
+  {
+    "previousPrice": 2400,
+    "nameEn": "Natural Power Mix ",
+    "id": "prod-1792166438801",
+    "category": "honey_nuts",
+    "nameBn": "ন্যাচারাল পাওয়ার মিক্স",
+    "createdAt": "2026-10-16T16:00:38.801Z",
+    "stockCount": 50,
+    "weightOptions": [
+      "450g",
+      "900g",
+      "1kg"
+    ],
+    "unit": "Per kg",
+    "descriptionBn": "কৌটার ওজন ৪৫০ গ্রাম। মধু,কালোজিরা,রসুন,তিনফল,কিসমিস,খেজুর,জাফরান,সাদা তিল ও কাজুবাদামের বেস্ট সমন্বয়। \nযা আপনার রোগ প্রতিরোধ ক্ষমতা বাড়াবে,শারীরিক শক্তি ও স্ট্যামিনা বাড়াবে এবং হজম শক্তি বাড়াতে সাহায্য করবে ইনশাআল্লাহ। ",
+    "categoryEn": "Honey Nuts",
+    "categoryBn": "হানি নাটস",
+    "descriptionEn": "",
+    "price": 2100,
+    "inStock": true,
+    "weightKg": 0.45,
+    "unitBn": "৪৫০ গ্রাম কৌটা (প্রতি কেজি ২১০০৳ ভিত্তিতে)",
+    "images": [
+      "/uploads/img_1792300798195_zrdx5s.jpeg",
+      "/uploads/natural_power_mix.jpg"
+    ]
+  },
+  {
+    "previousPrice": 1700,
+    "categoryBn": "প্রাকৃতিক মধু",
+    "category": "natural_honey",
+    "featured": true,
+    "storageEn": "Store at room temperature in a dry place. Do not refrigerate.",
+    "unit": "Per kg",
+    "descriptionBn": "সরাসরি বিশ্বস্ত মৌচাক থেকে সংগৃহীত কাঁচা ও সম্পূর্ণ ভেজালমুক্ত চাক ভাঙ্গা মধু। প্রাকৃতিক সুবাস ও মধুর নিখাদ গুণাগুণ অটুট রাখতে কোনো তাপ বা কৃত্রিম প্রক্রিয়াকরণ ছাড়াই বোতলজাত করা হয়।",
+    "weightOptions": [
+      "500g",
+      "1kg",
+      "2kg"
+    ],
+    "price": 1400,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005716/ChatGPT_Image_Sep_29_2026_09_43_29_PM.png"
+    ],
+    "descriptionEn": "Raw and pure honeycomb honey collected directly from natural bee hives without heating or artificial processing.",
+    "nameEn": "Natural Honeycomb Honey",
+    "inStock": true,
+    "nameBn": "প্রাকৃতিক চাক ভাঙ্গা মধু",
+    "stockCount": 45,
+    "storageBn": "সাধারণ তাপমাত্রায় শুকনা স্থানে রাখুন। ফ্রিজে রাখবেন না।",
+    "weightKg": 1,
+    "categoryEn": "Natural Honey",
+    "id": "prod-1"
+  },
+  {
+    "storageEn": "Keep airtight in a cool, dry place.",
+    "unit": "Per kg",
+    "category": "honey_nuts",
+    "price": 1300,
+    "descriptionEn": "A healthy and crunchy blend of premium roasted cashews, almonds, walnuts, pumpkin seeds dipped in 100% pure raw honey.",
+    "featured": true,
+    "inStock": true,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006036/1790695244373.png"
+    ],
+    "categoryBn": "হানি নাটস",
+    "nameBn": "প্রিমিয়াম হানি নাটস",
+    "stockCount": 60,
+    "previousPrice": 1500,
+    "nameEn": "Premium Honey Nuts",
+    "storageBn": "শুকনো ও শীতল জায়গায় ঢাকনা শক্ত করে রাখুন।",
+    "categoryEn": "Honey Nuts",
+    "id": "prod-2",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "descriptionBn": "খাঁটি মধুর সাথে রোস্টেড কাজুবাদাম, কাঠবাদাম, আখরোট ও বিভিন্ন প্রিমিয়াম ড্রাই ফ্রুটস ও বীজের অসাধারণ সংমিশ্রণ। প্রতিদিনের স্বাস্থ্যকর শক্তির সেরা উৎস।"
+  },
+  {
+    "storageBn": "বাতাসরোধী পাত্রে সংরক্ষণ করুন।",
+    "categoryEn": "Seeds & Nuts Mix",
+    "descriptionBn": "চিয়া সিড, মিষ্টি কুমড়ার বীজ, সূর্যমুখীর বীজ, তরমুজের বীজ এবং ড্রাই ফ্রুটস ও নাটসের উচ্চ ফাইবার এবং প্রোটিনসমৃদ্ধ স্বাস্থ্যকর মিশ্রণ।",
+    "id": "prod-3",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "featured": true,
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006038/1791915557629.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "category": "seeds_nuts",
+    "stockCount": 50,
+    "price": 1500,
+    "unit": "Per kg",
+    "previousPrice": 1800,
+    "storageEn": "Store in an airtight container away from moisture.",
+    "nameEn": "Premium Seeds & Nuts Mix",
+    "inStock": true,
+    "nameBn": "প্রিমিয়াম সিড+নাট মিক্স",
+    "descriptionEn": "High fiber, nutrient-dense mix of chia seeds, pumpkin seeds, sunflower seeds, melon seeds, and premium nuts.",
+    "categoryBn": "সিড ও নাট মিক্স"
+  },
+  {
+    "nameBn": "খাঁটি দানাদার গাওয়া ঘি",
+    "category": "ghee",
+    "descriptionEn": "Traditional churned granular golden cow ghee made from pure milk with an irresistible aroma and rich granular texture.",
+    "nameEn": "Pure Granular Gawa Ghee",
+    "featured": true,
+    "id": "prod-4",
+    "storageBn": "ঘরের স্বাভাবিক তাপমাত্রায় রাখুন। পানি ও ভেজা চামচ স্পর্শ করাবেন না।",
+    "inStock": true,
+    "categoryBn": "ঘি",
+    "price": 1600,
+    "previousPrice": 1800,
+    "categoryEn": "Pure Ghee",
+    "unit": "Per kg",
+    "storageEn": "Keep at room temperature. Keep away from water and wet spoons.",
+    "stockCount": 40,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005762/Amar_Ghor_Pure_Granular_Ghee.png"
+    ],
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "descriptionBn": "ঘাসের দেশি গরুর খাঁটি দুধ থেকে সনাতন পদ্ধতিতে জ্বাল দেওয়া সুগন্ধি ও লোভনীয় দানাদার গাওয়া ঘি। ভাত কিংবা রান্নায় আনে অপূর্ব স্বাদ।"
+  },
+  {
+    "id": "prod-5",
+    "descriptionEn": "Premium granular cream ghee prepared strictly from traditional milk-cream (shor) with thick golden granules and authentic heritage aroma.",
+    "categoryEn": "Pure Ghee",
+    "category": "ghee",
+    "featured": false,
+    "stockCount": 30,
+    "storageEn": "Store in a cool dry place in glass jar.",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792004716/1791915794571.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "previousPrice": 2000,
+    "nameEn": "Pure Granular Cream Ghee",
+    "inStock": true,
+    "nameBn": "খাঁটি দানাদার সরের ঘি",
+    "unit": "Per kg",
+    "storageBn": "শুকনো জায়গায় সংরক্ষণ করুন।",
+    "categoryBn": "ঘি",
+    "descriptionBn": "দুধের ঘন খাঁটি সর তুলে নিয়ে ঐতিহ্যবাহী পদ্ধতিতে তৈরি প্রিমিয়াম সরের ঘি। ঘন দানা, হালকা বাদামি আভা এবং তীব্র মিষ্টি সৌরভ।",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "price": 1800
+  },
+  {
+    "descriptionEn": "Cold-pressed authentic mustard oil pressed at low temperatures to preserve its natural pungency, nutrients, and authentic taste.",
+    "price": 280,
+    "stockCount": 120,
+    "nameEn": "Cold-Pressed Mustard Oil",
+    "storageBn": "আলো থেকে দূরে স্বাভাবিক তাপমাত্রায় রাখুন।",
+    "nameBn": "ঘানি ভাঙ্গা সরিষার তেল",
+    "categoryEn": "Mustard Oil",
+    "unit": "Per kg",
+    "category": "mustard_oil",
+    "categoryBn": "সরিষার তেল",
+    "id": "prod-6",
+    "inStock": true,
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/1790509356678.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "previousPrice": 310,
+    "featured": true,
+    "weightOptions": [
+      "500g",
+      "1kg",
+      "2kg",
+      "5kg"
+    ],
+    "descriptionBn": "বাছাইকৃত দেশি সরিষা থেকে কাঠের ঘানি বা কোল্ডপ্রেস পদ্ধতিতে ভাঙানো খাঁটি ঝাঁজালো সরিষার তেল। কোনো কেমিক্যাল বা কৃত্রিম গন্ধ নেই।",
+    "storageEn": "Store away from direct sunlight at room temperature."
+  },
+  {
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005838/1791739457980.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "unit": "Per kg",
+    "inStock": true,
+    "descriptionEn": "100% Cold-pressed edible extra virgin coconut oil extracted from fresh coconut milk without chemical refining or bleaching.",
+    "categoryEn": "Coconut Oil",
+    "storageEn": "Keep in dry place. Freezing during winter is natural.",
+    "stockCount": 35,
+    "category": "coconut_oil",
+    "price": 1800,
+    "descriptionBn": "তাজা নারিকেলের দুধ থেকে কোনো ধরনের তাপ প্রয়োগ ছাড়া কোল্ডপ্রেস পদ্ধতিতে সংগৃহীত খাওয়ার উপযোগী এক্সট্রা ভার্জিন নারিকেল তেল।",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "featured": false,
+    "categoryBn": "নারিকেল তেল",
+    "nameBn": "এক্সট্রা ভার্জিন নারিকেল তেল",
+    "previousPrice": 2000,
+    "id": "prod-7",
+    "nameEn": "Extra Virgin Coconut Oil",
+    "storageBn": "শুকনো জায়গায় রাখুন। শীতে স্বাভাবিকভাবেই জমে যেতে পারে।"
+  },
+  {
+    "nameEn": "Premium Sukkari Dates",
+    "categoryBn": "খেজুর",
+    "storageBn": "শুকনো স্থানে রাখুন, গ্রীষ্মে ফ্রিজের নরমাল চেম্বারে রাখা ভালো।",
+    "id": "prod-8",
+    "nameBn": "প্রিমিয়াম সুক্কারি খেজুর",
+    "unit": "Per kg",
+    "descriptionEn": "Premium Saudi golden Sukkari dates, naturally sweet, moist, and soft textured.",
+    "inStock": true,
+    "storageEn": "Keep in dry cool place or normal refrigerator zone.",
+    "weightOptions": [
+      "500g",
+      "1kg",
+      "2kg"
+    ],
+    "descriptionBn": "সৌদি আরবের বিখ্যাত সোনালী বিগ সুক্কারি খেজুর। মুখে দিলেই গলে যাওয়া নরম গঠন এবং প্রাকৃতিক মিষ্টি স্বাদের জন্য সবার প্রিয়।",
+    "featured": true,
+    "previousPrice": 1350,
+    "categoryEn": "Premium Dates",
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/1787847283256.jpg"
+    ],
+    "stockCount": 75,
+    "price": 1100,
+    "category": "dates"
+  },
+  {
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/IMG-20260823-WA0010.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "storageEn": "Keep in a cool and dry location.",
+    "id": "prod-9",
+    "inStock": true,
+    "descriptionEn": "Original Madinah jumbo size Ajwa dates with dark color, fine creases, and smooth sweet taste.",
+    "categoryBn": "খেজুর",
+    "descriptionBn": "মদিনা মুনাওয়ারার প্রিমিয়াম বড় সাইজের কালো আজওয়া খেজুর। নরম শাঁস, মৃদু মিষ্টি এবং অতুলনীয় গুণাগুণ সমৃদ্ধ।",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "categoryEn": "Premium Dates",
+    "featured": true,
+    "storageBn": "শীতল ও শুকনো স্থানে সংরক্ষণ করুন।",
+    "category": "dates",
+    "unit": "Per kg",
+    "stockCount": 40,
+    "price": 1500,
+    "previousPrice": 1800,
+    "nameBn": "প্রিমিয়াম বিগ সাইজ আজওয়া খেজুর",
+    "nameEn": "Premium Big-Size Ajwa Dates"
+  },
+  {
+    "price": 800,
+    "nameBn": "স্পেশাল আমসত্ত্ব চাটনি",
+    "descriptionEn": "Delicious traditional sweet, tangy, and mildly spiced mango fruit leather (amsotto) chutney prepared with authentic spices.",
+    "category": "chutney",
+    "nameEn": "Special Amsotto Chutney",
+    "storageBn": "শুকনো চামচ ব্যবহার করুন এবং কাঁচের জারে সংরক্ষণ করুন।",
+    "featured": true,
+    "inStock": true,
+    "categoryEn": "Mango Fruit Leather Chutney",
+    "stockCount": 50,
+    "previousPrice": 1050,
+    "storageEn": "Use dry spoons and keep in airtight jar.",
+    "unit": "Per kg",
+    "categoryBn": "আমসত্ত্ব চাটনি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005797/1791768902959.jpg"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "descriptionBn": "পাকা আমের সুস্বাদু আমসত্ত্ব দিয়ে তৈরি জিভে জল আনা টক-মিষ্টি-ঝাল স্পেশাল চাটনি। খাবারের সাথে বাড়তি রুচি যোগ করে।",
+    "id": "prod-10"
+  },
+  {
+    "categoryEn": "Natural Honey",
+    "featured": false,
+    "category": "natural_honey",
+    "descriptionBn": "প্রকৃতির এক দুর্লভ উপহার—ক্ষুদ্র খুঁদে মাছির (Trigona/Stingless Bee) তৈরি অম্লমধুর স্বাদের ঔষধি গুণের জন্য সমাদৃত বিরল মধু।",
+    "weightOptions": [
+      "250g",
+      "500g",
+      "1kg"
+    ],
+    "stockCount": 20,
+    "price": 2100,
+    "nameEn": "Rare Khude Machhi Honey",
+    "previousPrice": 2500,
+    "nameBn": "বিরল খুঁদে মাছির মধু",
+    "storageBn": "স্বাভাবিক তাপমাত্রায় সংরক্ষণ করুন।",
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006038/InShot_20260608_131320655.jpg"
+    ],
+    "id": "prod-11",
+    "descriptionEn": "Rare small-bee (stingless bee) raw natural honey collected from secluded forest floral sources with a unique tangy-sweet profile.",
+    "unit": "Per kg",
+    "inStock": true,
+    "storageEn": "Store at standard room temperature.",
+    "categoryBn": "প্রাকৃতিক মধু"
+  },
+  {
+    "categoryEn": "Natural Honey",
+    "storageBn": "রোদ ও আর্দ্রতামুক্ত স্থানে রাখুন।",
+    "nameBn": "লিচু ফুলের মধু",
+    "stockCount": 65,
+    "nameEn": "Lychee Flower Honey",
+    "descriptionEn": "Golden light lychee blossom honey harvested during the blooming season of lychee orchards with a distinct floral aroma.",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "unit": "Per kg",
+    "storageEn": "Store in dry place away from moisture.",
+    "descriptionBn": "লিচু বাগানের মনোরম ফুল ফোটার মৌসুমে সংগৃহীত হালকা সোনালী রঙের সুমিষ্ট ও সুবাসিত কাঁচা মধু।",
+    "id": "prod-12",
+    "featured": false,
+    "price": 800,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/ChatGPT_Image_Sep_29_2026_10_14_30_PM.png"
+    ],
+    "previousPrice": 920,
+    "inStock": true,
+    "categoryBn": "প্রাকৃতিক মধু",
+    "category": "natural_honey"
+  },
+  {
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "categoryEn": "Natural Honey",
+    "descriptionBn": "শীতকালে দিগন্তজোড়া হলুদ সরিষা ফুলের প্রাঙ্গণ থেকে সংগৃহীত। শীতের সময়ে এটি প্রাকৃতিক বৈশিষ্ট্যের কারণে জমাট বাঁধতে পারে যা খাঁটি হওয়ার লক্ষণ।",
+    "featured": false,
+    "unit": "Per kg",
+    "nameBn": "সরিষা ফুলের মধু",
+    "stockCount": 80,
+    "nameEn": "Mustard Flower Honey",
+    "id": "prod-13",
+    "category": "natural_honey",
+    "storageEn": "Store at room temperature. If crystallized, place jar in warm water.",
+    "previousPrice": 750,
+    "inStock": true,
+    "storageBn": "ঘরের স্বাভাবিক তাপমাত্রায় রাখুন। জমে গেলে কুসুম গরম পানিতে রেখে স্বাভাবিক করা যায়।",
+    "price": 600,
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006036/ChatGPT_Image_Sep_29_2026_10_17_12_PM.png"
+    ],
+    "unitBn": "প্রতি কেজি",
+    "descriptionEn": "Authentic mustard flower raw honey from winter mustard fields. May crystallize in cool weather as a natural mark of purity.",
+    "categoryBn": "প্রাকৃতিক মধু"
+  },
+  {
+    "descriptionBn": "কালোজিরা চাষের মাঠে মৌমাছিদের আহরণ করা কালচে লাল রঙের ঘন ও অনন্য স্বাদের পুষ্টিকর মধু।",
+    "weightOptions": [
+      "500g",
+      "1kg"
+    ],
+    "categoryBn": "প্রাকৃতিক মধু",
+    "storageBn": "শুকনো ও শীতল জায়গায় রাখুন।",
+    "unit": "Per kg",
+    "id": "prod-14",
+    "previousPrice": 1800,
+    "unitBn": "প্রতি কেজি",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/ChatGPT_Image_Sep_29_2026_10_12_14_PM.png"
+    ],
+    "price": 1400,
+    "storageEn": "Keep in cool dry place.",
+    "category": "natural_honey",
+    "nameEn": "Black Cumin Flower Honey",
+    "inStock": true,
+    "featured": true,
+    "nameBn": "কালোজিরা ফুলের মধু",
+    "stockCount": 45,
+    "descriptionEn": "Deep amber black-seed (kalijira) flower natural honey with rich herbal undertones and exceptional nutritional density.",
+    "categoryEn": "Natural Honey"
+  },
+  {
+    "price": 950,
+    "unitBn": "প্রতি পিস",
+    "images": [
+      "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80"
+    ],
+    "descriptionEn": "Elegant handcrafted wall hanging crafted with natural eco-friendly jute and polished bamboo reeds.",
+    "id": "decor-1",
+    "storageBn": "শুকনো নরম কাপড় দিয়ে মুছে পরিষ্কার রাখুন।",
+    "categoryBn": "হোম ডেকোর",
+    "inStock": true,
+    "stockCount": 15,
+    "featured": true,
+    "categoryEn": "Home Decor",
+    "previousPrice": 1200,
+    "category": "home_decor",
+    "unit": "Piece",
+    "weightOptions": [
+      "Standard Size (24\" x 14\")"
+    ],
+    "descriptionBn": "দেশীয় প্রাকৃতিক পাট ও বাঁশের সূক্ষ্ম বুননে তৈরি আকর্ষণীয় ওয়াল ডেকোর যা আপনার ঘরের ড্রয়িংরুম বা লিভিংরুমে আনবে প্রাকৃতিক আভিজাত্য।",
+    "nameBn": "হস্তশিল্প পাট ও বাঁশের ওয়াল হ্যাঙ্গিং আর্ট",
+    "storageEn": "Wipe clean with a dry soft cloth.",
+    "nameEn": "Handcrafted Jute & Bamboo Wall Hanging Art"
+  },
+  {
+    "categoryBn": "হোম ডেকোর",
+    "previousPrice": 900,
+    "storageBn": "সাবধানে হাতল দিয়ে ধরুন। নরম স্পঞ্জ দিয়ে ধুয়ে নিন।",
+    "unit": "Piece",
+    "inStock": true,
+    "price": 799,
+    "unitBn": "প্রতি পিস",
+    "images": [
+      "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006036/IMG-20260922-WA0000.jpg"
+    ],
+    "weightOptions": [
+      "Medium (10 inch)"
+    ],
+    "descriptionBn": "পোড়ামাটি ও সিরামিকের মিশেলে তৈরি নান্দনিক টেবিল ফুলদানি। ঘরের ডাইনিং টেবিল বা বুকশেলফের শোভা বাড়াতে অতুলনীয়।",
+    "storageEn": "Handle with care. Hand wash with mild sponge.",
+    "descriptionEn": "Aesthetic earthy ceramic vase made by local artisans, perfect for dried botanicals and fresh blossoms.",
+    "category": "home_decor",
+    "nameBn": "নান্দনিক ক্যালিওগ্রাফি এলইডি টেবিল/ওয়াল ল্যাম্প",
+    "featured": true,
+    "nameEn": "Aesthetic Calligraphy LED Table/Wall Lamp",
+    "stockCount": 12,
+    "categoryEn": "Home Decor",
+    "id": "decor-2"
+  }
+]
