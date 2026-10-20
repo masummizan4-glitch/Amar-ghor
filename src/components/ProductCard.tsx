@@ -14,6 +14,7 @@ import {
   getDefaultProductWeight,
   resolveImageUrl
 } from '../utils/formatters';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface ProductCardProps {
   product: Product;
@@ -248,7 +249,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-1.5 px-2 bg-[#E7F6ED] hover:bg-[#D5EFE0] text-[#1B4332] font-semibold text-[11px] rounded-lg transition-colors flex items-center justify-center gap-1.5 border border-[#BDE5CB]"
+              onClick={() => playWhatsAppPingSound()}
+              className="w-full py-1.5 px-2 bg-[#E7F6ED] hover:bg-[#D5EFE0] active:scale-98 text-[#1B4332] font-semibold text-[11px] rounded-lg transition-all flex items-center justify-center gap-1.5 border border-[#BDE5CB]"
             >
               <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
               <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে অর্ডার' : 'Order via WhatsApp'}</span>

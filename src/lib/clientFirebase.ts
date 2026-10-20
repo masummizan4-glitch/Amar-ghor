@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs } from 'firebase/firestore';
-import { Product, SiteSettings, Order, ContactMessage, BlacklistEntry } from '../types';
+import { Product, SiteSettings, Order, ContactMessage, BlacklistEntry, CustomerReview, ScreenshotReview } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let firestoreInstance: any = null;
@@ -372,6 +372,111 @@ export async function changeAdminPasswordInCloud(newPassword: string): Promise<b
     return true;
   } catch (err: any) {
     console.warn('[ClientFirebase] changeAdminPasswordInCloud error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Load customer reviews from Cloud Firestore
+ */
+export async function loadReviewsFromCloud(): Promise<CustomerReview[] | null> {
+  const db = getClientFirestoreDb();
+  if (!db) return null;
+
+  try {
+    const revRef = doc(db, 'app_store', 'reviews');
+    const snap = await getDoc(revRef);
+    if (snap.exists()) {
+      const items = snap.data()?.items;
+      if (Array.isArray(items)) {
+        return items as CustomerReview[];
+      }
+    }
+    return null;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] loadReviewsFromCloud error:', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Save a new customer review to Cloud Firestore
+ */
+export async function saveReviewToCloud(review: CustomerReview): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const revRef = doc(db, 'app_store', 'reviews');
+    const snap = await getDoc(revRef);
+    const existing: CustomerReview[] = snap.exists() ? snap.data()?.items || [] : [];
+    const updated = [review, ...existing];
+    await setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] saveReviewToCloud error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Delete a review from Cloud Firestore
+ */
+export async function deleteReviewFromCloud(id: string): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const revRef = doc(db, 'app_store', 'reviews');
+    const snap = await getDoc(revRef);
+    if (snap.exists()) {
+      const existing: CustomerReview[] = snap.data()?.items || [];
+      const updated = existing.filter((r) => r.id !== id);
+      await setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] deleteReviewFromCloud error:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Load screenshot reviews from Cloud Firestore
+ */
+export async function loadScreenshotReviewsFromCloud(): Promise<ScreenshotReview[] | null> {
+  const db = getClientFirestoreDb();
+  if (!db) return null;
+
+  try {
+    const ssRef = doc(db, 'app_store', 'screenshot_reviews');
+    const snap = await getDoc(ssRef);
+    if (snap.exists()) {
+      const items = snap.data()?.items;
+      if (Array.isArray(items) && items.length > 0) {
+        return items as ScreenshotReview[];
+      }
+    }
+    return null;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] loadScreenshotReviewsFromCloud error:', err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * Save screenshot reviews array to Cloud Firestore
+ */
+export async function saveScreenshotReviewsToCloud(reviews: ScreenshotReview[]): Promise<boolean> {
+  const db = getClientFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const ssRef = doc(db, 'app_store', 'screenshot_reviews');
+    await setDoc(ssRef, { items: reviews, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.warn('[ClientFirebase] saveScreenshotReviewsToCloud error:', err?.message || err);
     return false;
   }
 }

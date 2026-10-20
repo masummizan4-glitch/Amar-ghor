@@ -3,6 +3,7 @@ import { ShoppingBag, Search, Phone, Menu, X, ShieldCheck, HeartHandshake, Lock,
 import { Language, SiteSettings, Product } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { formatPrice, toBnNumber, matchProductSearch } from '../utils/formatters';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface HeaderProps {
   lang: Language;
@@ -92,6 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'shop', labelBn: 'সকল পণ্য', labelEn: 'Shop All' },
     { id: 'food', labelBn: 'খাঁটি খাবার', labelEn: 'Authentic Food' },
     { id: 'decor', labelBn: 'হোম ডেকোর', labelEn: 'Home Decor' },
+    { id: 'reviews', labelBn: 'কাস্টমার রিভিউ', labelEn: 'Reviews' },
     { id: 'about', labelBn: 'আমাদের সম্পর্কে', labelEn: 'About Us' },
     { id: 'contact', labelBn: 'যোগাযোগ', labelEn: 'Contact' },
   ];
@@ -125,6 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
                 href={`https://wa.me/88${settings.whatsapp}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => playWhatsAppPingSound()}
                 className="hover:text-[#E8C547] transition-colors font-medium flex items-center gap-1"
               >
                 <span className="text-[#25D366]">WhatsApp:</span> {settings.whatsapp}
@@ -643,6 +646,7 @@ export const Header: React.FC<HeaderProps> = ({
                 href={`https://wa.me/88${settings.whatsapp}`}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => playWhatsAppPingSound()}
                 className="text-emerald-700 font-bold"
               >
                 WhatsApp Order

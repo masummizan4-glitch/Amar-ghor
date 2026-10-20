@@ -5,6 +5,7 @@ import { formatPrice, toBnNumber, calculateItemPrice, formatWeightLabel, isWeigh
 import { calculateDeliveryCharge } from '../utils/delivery';
 import { BrandLogo } from './BrandLogo';
 import { saveOrderToCloud } from '../lib/clientFirebase';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -16,25 +17,128 @@ interface CheckoutModalProps {
   onUpdateQuantity?: (productId: string, quantity: number, selectedWeight?: string) => void;
 }
 
-export const BD_DISTRICTS = [
-  'ঢাকা (Dhaka)',
-  'চট্টগ্রাম (Chattogram)',
-  'রাজশাহী (Rajshahi)',
-  'সিলেট (Sylhet)',
-  'খুলনা (Khulna)',
-  'বরিশাল (Barishal)',
-  'রংপুর (Rangpur)',
-  'ময়মনসিংহ (Mymensingh)',
-  'গাজীপুর (Gazipur)',
-  'নারায়ণগঞ্জ (Narayanganj)',
-  'কুমিল্লা (Cumilla)',
-  'বগুড়া (Bogura)',
-  'ফরিদপুর (Faridpur)',
-  'যশোর (Jashore)',
-  'কুষ্টিয়া (Kushtia)',
-  'দিনাজপুর (Dinajpur)',
-  'অন্যান্য জেলা (Other District)'
+export interface DivisionData {
+  divisionBn: string;
+  divisionEn: string;
+  districts: string[];
+}
+
+export const BD_DIVISIONS: DivisionData[] = [
+  {
+    divisionBn: 'ঢাকা বিভাগ',
+    divisionEn: 'Dhaka Division',
+    districts: [
+      'ঢাকা (Dhaka)',
+      'গাজীপুর (Gazipur)',
+      'নারায়ণগঞ্জ (Narayanganj)',
+      'টাঙ্গাইল (Tangail)',
+      'কিশোরগঞ্জ (Kishoreganj)',
+      'মানিকগঞ্জ (Manikganj)',
+      'মুন্সীগঞ্জ (Munshiganj)',
+      'নরসিংদী (Narsingdi)',
+      'ফরিদপুর (Faridpur)',
+      'গোপালগঞ্জ (Gopalganj)',
+      'মাদারীপুর (Madaripur)',
+      'রাজবাড়ী (Rajbari)',
+      'শরীয়তপুর (Shariatpur)'
+    ]
+  },
+  {
+    divisionBn: 'চট্টগ্রাম বিভাগ',
+    divisionEn: 'Chattogram Division',
+    districts: [
+      'চট্টগ্রাম (Chattogram)',
+      'কক্সবাজার (Cox\'s Bazar)',
+      'কুমিল্লা (Cumilla)',
+      'ব্রাহ্মণবাড়িয়া (Brahmanbaria)',
+      'চাঁদপুর (Chandpur)',
+      'নোয়াখালী (Noakhali)',
+      'ফেনী (Feni)',
+      'লক্ষ্মীপুর (Lakshmipur)',
+      'রাঙ্গামাটি (Rangamati)',
+      'বান্দরবান (Bandarban)',
+      'খাগড়াছড়ি (Khagrachhari)'
+    ]
+  },
+  {
+    divisionBn: 'রাজশাহী বিভাগ',
+    divisionEn: 'Rajshahi Division',
+    districts: [
+      'রাজশাহী (Rajshahi)',
+      'বগুড়া (Bogura)',
+      'পাবনা (Pabna)',
+      'সিরাজগঞ্জ (Sirajganj)',
+      'নওগাঁ (Naogaon)',
+      'নাটোর (Natore)',
+      'চাঁপাইনবাবগঞ্জ (Chapai Nawabganj)',
+      'জয়পুরহাট (Joypurhat)'
+    ]
+  },
+  {
+    divisionBn: 'খুলনা বিভাগ',
+    divisionEn: 'Khulna Division',
+    districts: [
+      'খুলনা (Khulna)',
+      'যশোর (Jashore)',
+      'কুষ্টিয়া (Kushtia)',
+      'ঝিনাইদহ (Jhenaidah)',
+      'বাগেরহাট (Bagerhat)',
+      'চুয়াডাঙ্গা (Chuadanga)',
+      'মেহেরপুর (Meherpur)',
+      'মাগুরা (Magura)',
+      'নড়াইল (Narail)',
+      'সাতক্ষীরা (Satkhira)'
+    ]
+  },
+  {
+    divisionBn: 'বরিশাল বিভাগ',
+    divisionEn: 'Barishal Division',
+    districts: [
+      'বরিশাল (Barishal)',
+      'পটুয়াখালী (Patuakhali)',
+      'ভোলা (Bhola)',
+      'পিরোজপুর (Pirojpur)',
+      'বরগুনা (Barguna)',
+      'ঝালকাঠি (Jhalakathi)'
+    ]
+  },
+  {
+    divisionBn: 'সিলেট বিভাগ',
+    divisionEn: 'Sylhet Division',
+    districts: [
+      'সিলেট (Sylhet)',
+      'মৌলভীবাজার (Moulvibazar)',
+      'হবিগঞ্জ (Habiganj)',
+      'সুনামগঞ্জ (Sunamganj)'
+    ]
+  },
+  {
+    divisionBn: 'রংপুর বিভাগ',
+    divisionEn: 'Rangpur Division',
+    districts: [
+      'রংপুর (Rangpur)',
+      'দিনাজপুর (Dinajpur)',
+      'গাইবান্ধা (Gaibandha)',
+      'কুড়িগ্রাম (Kurigram)',
+      'লালমনিরহাট (Lalmonirhat)',
+      'নীলফামারী (Nilphamari)',
+      'পঞ্চগড় (Panchagarh)',
+      'ঠাকুরগাঁও (Thakurgaon)'
+    ]
+  },
+  {
+    divisionBn: 'ময়মনসিংহ বিভাগ',
+    divisionEn: 'Mymensingh Division',
+    districts: [
+      'ময়মনসিংহ (Mymensingh)',
+      'জামালপুর (Jamalpur)',
+      'শেরপুর (Sherpur)',
+      'নেত্রকোণা (Netrokona)'
+    ]
+  }
 ];
+
+export const BD_DISTRICTS: string[] = BD_DIVISIONS.flatMap((d) => d.districts);
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
@@ -325,7 +429,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 py-3 px-4 bg-[#25D366] text-white font-bold text-sm rounded-xl hover:bg-[#1EBE5D] transition-colors flex items-center justify-center gap-2"
+                  onClick={() => playWhatsAppPingSound()}
+                  className="flex-1 py-3 px-4 bg-[#25D366] text-white font-bold text-sm rounded-xl hover:bg-[#1EBE5D] active:scale-98 transition-all flex items-center justify-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4 fill-current" />
                   <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে আপডেট পান' : 'Get WhatsApp Update'}</span>
@@ -398,17 +503,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      {lang === 'bn' ? 'জেলা নির্ধারণ করুন *' : 'Select District *'}
+                      {lang === 'bn' ? 'জেলা নির্ধারণ করুন (৬৪ জেলা) *' : 'Select District (All 64 Districts) *'}
                     </label>
                     <select
                       value={district}
                       onChange={(e) => setDistrict(e.target.value)}
                       className="w-full px-3.5 py-2 text-sm bg-white border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
                     >
-                      {BD_DISTRICTS.map((dist) => (
-                        <option key={dist} value={dist}>
-                          {dist}
-                        </option>
+                      {BD_DIVISIONS.map((div) => (
+                        <optgroup
+                          key={div.divisionEn}
+                          label={lang === 'bn' ? `${div.divisionBn} (${toBnNumber(div.districts.length)}টি জেলা)` : `${div.divisionEn} (${div.districts.length} Districts)`}
+                        >
+                          {div.districts.map((dist) => (
+                            <option key={dist} value={dist}>
+                              {dist}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>

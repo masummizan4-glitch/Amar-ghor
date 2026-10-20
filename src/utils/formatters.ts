@@ -156,7 +156,8 @@ export function calculateItemPrice(basePrice: number, selectedWeight?: string, u
   return Math.round(basePrice * multiplier);
 }
 
-export function isWeightBasedProduct(product: { unitBn?: string; unit?: string }): boolean {
+export function isWeightBasedProduct(product?: { unitBn?: string; unit?: string } | null): boolean {
+  if (!product) return false;
   const u = String(product.unitBn || product.unit || '').toLowerCase();
   if (u.includes('পিস') || u.includes('piece')) return false;
   return (

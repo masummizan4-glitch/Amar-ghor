@@ -8,7 +8,7 @@ import {
   ShieldAlert, UserX, UserCheck, Users, Ban, Download, Filter, HelpCircle, Shield,
   History, Star, PhoneCall
 } from 'lucide-react';
-import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile } from '../types';
+import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile, CustomerReview, ScreenshotReview } from '../types';
 import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel } from '../utils/formatters';
 import { CATEGORIES } from './CategoryBar';
 import { BrandLogo } from './BrandLogo';
@@ -23,7 +23,9 @@ import {
   loadBlacklistFromCloud,
   saveBlacklistToCloud,
   updateOrderStatusInCloud,
-  changeAdminPasswordInCloud
+  changeAdminPasswordInCloud,
+  deleteReviewFromCloud,
+  saveScreenshotReviewsToCloud
 } from '../lib/clientFirebase';
 
 interface AdminDashboardProps {
@@ -33,7 +35,14 @@ interface AdminDashboardProps {
   onRefreshProducts: () => void;
   settings: SiteSettings;
   onUpdateSettings: (newSettings: Partial<SiteSettings>) => void;
+  reviews?: CustomerReview[];
+  onRefreshReviews?: () => void;
+  screenshotReviews?: ScreenshotReview[];
+  onRefreshScreenshotReviews?: () => void;
 }
+
+const DEFAULT_EMPTY_REVIEWS: CustomerReview[] = [];
+const DEFAULT_EMPTY_SCREENSHOTS: ScreenshotReview[] = [];
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
@@ -41,7 +50,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   products,
   onRefreshProducts,
   settings,
-  onUpdateSettings
+  onUpdateSettings,
+  reviews = DEFAULT_EMPTY_REVIEWS,
+  onRefreshReviews,
+  screenshotReviews = DEFAULT_EMPTY_SCREENSHOTS,
+  onRefreshScreenshotReviews
 }) => {
   // Authentication State
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('amarghor_admin_token'));
@@ -50,7 +63,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Active Admin Tab
-  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'customers' | 'blacklist' | 'messages' | 'settings'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'customers' | 'blacklist' | 'messages' | 'reviews' | 'settings'>('products');
+
+  // Reviews & Social Proof State
+  const [adminReviews, setAdminReviews] = useState<CustomerReview[]>(() => reviews);
+  const [adminScreenshotReviews, setAdminScreenshotReviews] = useState<ScreenshotReview[]>(() => screenshotReviews);
+  const [reviewSubTab, setReviewSubTab] = useState<'screenshots' | 'text_reviews'>('screenshots');
+  const [showAddScreenshotModal, setShowAddScreenshotModal] = useState(false);
+  const [newSsForm, setNewSsForm] = useState({
+    imageUrl: '',
+    platform: 'whatsapp' as 'whatsapp' | 'facebook' | 'messenger' | 'google' | 'other',
+    title: '',
+    caption: '',
+    customerName: '',
+    rating: 5
+  });
+  const [savingScreenshot, setSavingScreenshot] = useState(false);
+  const [uploadingSsImage, setUploadingSsImage] = useState(false);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (reviews && reviews.length > 0) {
+      setAdminReviews(reviews);
+    }
+  }, [reviews]);
+
+  useEffect(() => {
+    if (screenshotReviews && screenshotReviews.length > 0) {
+      setAdminScreenshotReviews(screenshotReviews);
+    }
+  }, [screenshotReviews]);
 
   // Orders State & Filters
   const [orders, setOrders] = useState<Order[]>([]);
@@ -399,6 +441,161 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     } catch (err) {
       console.error('Failed to remove from blacklist:', err);
+    }
+  };
+
+  // Handle Delete Customer Review
+  const handleDeleteCustomerReview = async (id: string) => {
+    if (!token || !confirm('আপনি কি নিশ্চিত যে এই রিভিউটি মুছে ফেলতে চান?')) return;
+    setDeletingReviewId(id);
+    try {
+      let deleted = false;
+      try {
+        const res = await fetch(`/api/admin/reviews/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) deleted = true;
+      } catch {}
+
+      if (!deleted) {
+        await deleteReviewFromCloud(id).catch(() => {});
+        deleted = true;
+      }
+
+      setAdminReviews((prev) => prev.filter((r) => r.id !== id));
+      onRefreshReviews?.();
+    } catch (err) {
+      console.error('Failed to delete review:', err);
+    } finally {
+      setDeletingReviewId(null);
+    }
+  };
+
+  // Handle Delete Screenshot Review
+  const handleDeleteScreenshotReview = async (id: string) => {
+    if (!token || !confirm('আপনি কি এই সোশ্যাল রিভিউ স্ক্রিনশটটি মুছে ফেলতে চান?')) return;
+    try {
+      let deleted = false;
+      try {
+        const res = await fetch(`/api/admin/screenshot-reviews/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) deleted = true;
+      } catch {}
+
+      const updated = adminScreenshotReviews.filter((s) => s.id !== id);
+      setAdminScreenshotReviews(updated);
+      await saveScreenshotReviewsToCloud(updated).catch(() => {});
+      onRefreshScreenshotReviews?.();
+    } catch (err) {
+      console.error('Failed to delete screenshot review:', err);
+    }
+  };
+
+  // Handle Screenshot Upload
+  const handleScreenshotImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingSsImage(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const res = await fetch('/api/admin/upload-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              adminToken: token,
+              imageData: base64,
+              filename: file.name
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.imageUrl) {
+              setNewSsForm((prev) => ({ ...prev, imageUrl: data.imageUrl }));
+              return;
+            }
+          }
+        } catch {}
+
+        // Fallback save to cloud
+        const cloudResult = await saveImageToCloud(base64, file.name).catch(() => '');
+        const finalUrl = typeof cloudResult === 'string' && cloudResult ? cloudResult : base64;
+        setNewSsForm((prev) => ({ ...prev, imageUrl: finalUrl }));
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Screenshot upload error:', err);
+    } finally {
+      setUploadingSsImage(false);
+    }
+  };
+
+  // Handle Add Screenshot Review
+  const handleCreateScreenshotReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSsForm.imageUrl.trim()) {
+      alert('অনুগ্রহ করে স্ক্রিনশটের ছবি নির্বাচন বা URL দিন।');
+      return;
+    }
+    setSavingScreenshot(true);
+    try {
+      const newReviewItem: ScreenshotReview = {
+        id: `ss-${Date.now()}`,
+        imageUrl: newSsForm.imageUrl.trim(),
+        platform: newSsForm.platform,
+        title: newSsForm.title.trim() || 'কাস্টমার রিভিউ স্ক্রিনশট',
+        caption: newSsForm.caption.trim(),
+        customerName: newSsForm.customerName.trim() || 'সন্তুষ্ট কাস্টমার',
+        rating: newSsForm.rating || 5,
+        featured: true,
+        createdAt: new Date().toISOString()
+      };
+
+      let saved = false;
+      try {
+        const res = await fetch('/api/admin/screenshot-reviews', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(newReviewItem)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.screenshotReview) {
+            setAdminScreenshotReviews((prev) => [data.screenshotReview, ...prev]);
+            saved = true;
+          }
+        }
+      } catch {}
+
+      if (!saved) {
+        const updated = [newReviewItem, ...adminScreenshotReviews];
+        setAdminScreenshotReviews(updated);
+        await saveScreenshotReviewsToCloud(updated).catch(() => {});
+      }
+
+      setShowAddScreenshotModal(false);
+      setNewSsForm({
+        imageUrl: '',
+        platform: 'whatsapp',
+        title: '',
+        caption: '',
+        customerName: '',
+        rating: 5
+      });
+      onRefreshScreenshotReviews?.();
+    } catch (err) {
+      console.error('Failed to create screenshot review:', err);
+    } finally {
+      setSavingScreenshot(false);
     }
   };
 
@@ -1135,6 +1332,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <MessageSquare className="w-4 h-4" />
                 <span>যোগাযোগ বার্তা ({messages.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('reviews')}
+                className={`py-3.5 px-3 border-b-2 text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'reviews'
+                    ? 'border-[#133E2B] text-[#133E2B]'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Star className="w-4 h-4 text-[#D4AF37]" />
+                <span>রিভিউ ও সোশ্যাল প্রমাণ ({adminScreenshotReviews.length + adminReviews.length})</span>
               </button>
 
               <button
@@ -2790,7 +2999,393 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
 
-            {/* Tab 4: Store Settings */}
+            {/* Tab: Reviews & Social Proof */}
+            {activeTab === 'reviews' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* Header & Sub-tab switcher */}
+                <div className="bg-white p-5 rounded-2xl border border-[#E8E2D8] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-extrabold text-lg text-[#133E2B] flex items-center gap-2">
+                      <Star className="w-5 h-5 text-[#D4AF37] fill-[#D4AF37]" />
+                      <span>রিভিউ ও কাস্টমার সোশ্যাল প্রমাণ ম্যানেজমেন্ট</span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      ওয়েবসাইটে কাস্টমারদের সরাসরি স্ক্রিনশট স্লাইডার এবং গ্রাহকদের নিজস্ব মতামত নিয়ন্ত্রণ করুন
+                    </p>
+                  </div>
+
+                  {/* Sub-tab toggle buttons */}
+                  <div className="flex items-center gap-2 bg-[#FAF8F5] p-1.5 rounded-xl border border-[#E8E2D8]">
+                    <button
+                      type="button"
+                      onClick={() => setReviewSubTab('screenshots')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        reviewSubTab === 'screenshots'
+                          ? 'bg-[#133E2B] text-white shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      স্ক্রিনশট স্লাইডার ({adminScreenshotReviews.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewSubTab('text_reviews')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        reviewSubTab === 'text_reviews'
+                          ? 'bg-[#133E2B] text-white shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      কাস্টমার রিভিউ ({adminReviews.length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* SubTab 1: Screenshot Reviews for the Carousel Slider */}
+                {reviewSubTab === 'screenshots' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-600 font-medium">
+                        হোমপেজের স্লাইডারে প্রদর্শিত প্ল্যাটফর্ম স্ক্রিনশটসমূহ (হোয়াটসঅ্যাপ, ফেসবুক ইত্যাদি):
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddScreenshotModal(true)}
+                        className="px-3.5 py-2 bg-[#2D6A4F] hover:bg-[#133E2B] text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>নতুন স্ক্রিনশট যোগ করুন</span>
+                      </button>
+                    </div>
+
+                    {adminScreenshotReviews.length === 0 ? (
+                      <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-[#DDD5C7] space-y-3">
+                        <ImageIcon className="w-10 h-10 text-gray-400 mx-auto" />
+                        <h4 className="font-bold text-gray-700 text-sm">কোনো স্ক্রিনশট রিভিউ নেই</h4>
+                        <p className="text-xs text-gray-500 max-w-md mx-auto">
+                          হোয়াটসঅ্যাপ বা ফেসবুকের কাস্টমার চ্যাটের স্ক্রিনশট আপলোড করুন, যা হোমপেজে আকর্ষণীয় স্লাইডার আকারে কাস্টমারদের সামনে প্রদর্শিত হবে।
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddScreenshotModal(true)}
+                          className="mt-2 px-4 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          প্রথম স্ক্রিনশট আপলোড করুন
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {adminScreenshotReviews.map((ss) => (
+                          <div
+                            key={ss.id}
+                            className="bg-white rounded-2xl border border-[#E8E2D8] overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow"
+                          >
+                            <div className="p-3 bg-[#FAF8F5] relative border-b border-[#E8E2D8] flex items-center justify-center min-h-[180px]">
+                              <img
+                                src={ss.imageUrl}
+                                alt={ss.title || 'Screenshot'}
+                                className="max-h-[170px] w-auto max-w-full object-contain rounded-lg shadow-xs"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+                                }}
+                              />
+                              <div className="absolute top-2.5 left-2.5">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  ss.platform === 'whatsapp'
+                                    ? 'bg-[#25D366]/20 text-[#138A36] border-[#25D366]/40'
+                                    : ss.platform === 'facebook'
+                                    ? 'bg-[#1877F2]/20 text-[#1877F2] border-[#1877F2]/40'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}>
+                                  {ss.platform.toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Star
+                                      key={s}
+                                      className={`w-3.5 h-3.5 ${
+                                        s <= (ss.rating || 5)
+                                          ? 'fill-[#D4AF37] text-[#D4AF37]'
+                                          : 'text-gray-300'
+                                      }`}
+                                    />
+                                  ))}
+                                  <span className="text-[11px] font-bold text-gray-700 ml-1">
+                                    {(ss.rating || 5).toFixed(1)}
+                                  </span>
+                                </div>
+                                <h4 className="font-bold text-xs text-[#133E2B] line-clamp-1">
+                                  {ss.title || 'কাস্টমার রিভিউ'}
+                                </h4>
+                                {ss.caption && (
+                                  <p className="text-[11px] text-gray-600 line-clamp-2 italic">
+                                    "{ss.caption}"
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-gray-500 font-medium">
+                                  গ্রাহক: {ss.customerName || 'সন্তুষ্ট কাস্টমার'}
+                                </p>
+                              </div>
+
+                              <div className="pt-3 border-t border-[#E8E2D8] flex items-center justify-between">
+                                <span className="text-[10px] text-gray-400">
+                                  {ss.createdAt ? new Date(ss.createdAt).toLocaleDateString('bn-BD') : ''}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteScreenshotReview(ss.id)}
+                                  className="text-[11px] text-red-600 hover:text-red-800 font-bold flex items-center gap-1 p-1 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                  title="স্ক্রিনশট মুছুন"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>মুছুন</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SubTab 2: Customer Text Reviews */}
+                {reviewSubTab === 'text_reviews' && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-600 font-medium">
+                      ওয়েবসাইটে গ্রাহকদের সাবমিট করা সকল মতামত ও রেটিং:
+                    </p>
+
+                    {adminReviews.length === 0 ? (
+                      <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-[#DDD5C7] space-y-2">
+                        <MessageSquare className="w-10 h-10 text-gray-400 mx-auto" />
+                        <h4 className="font-bold text-gray-700 text-sm">কোনো কাস্টমার রিভিউ পাওয়া যায়নি</h4>
+                        <p className="text-xs text-gray-500">গ্রাহকরা ওয়েবসাইটে মতামত দিলে তা এখানে জমা হবে।</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {adminReviews.map((rev) => (
+                          <div
+                            key={rev.id}
+                            className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8E2D8] flex flex-col sm:flex-row sm:items-start justify-between gap-4 shadow-xs"
+                          >
+                            <div className="space-y-2 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-sm text-[#133E2B]">{rev.name}</span>
+                                {rev.district && (
+                                  <span className="text-[11px] text-gray-500 bg-[#FAF8F5] px-2 py-0.5 rounded-md border border-[#E8E2D8]">
+                                    📍 {rev.district}
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-0.5 ml-2">
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Star
+                                      key={s}
+                                      className={`w-3.5 h-3.5 ${
+                                        s <= rev.rating ? 'fill-[#D4AF37] text-[#D4AF37]' : 'text-gray-300'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                  পণ্য: {rev.productName || 'সাধারণ কেনাকাটা'}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-gray-700 bg-[#FAF8F5] p-3 rounded-xl border border-[#E8E2D8] leading-relaxed">
+                                {rev.comment}
+                              </p>
+
+                              <span className="text-[10px] text-gray-400 block">
+                                {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('bn-BD') : ''}
+                              </span>
+                            </div>
+
+                            <div className="shrink-0 flex items-center sm:flex-col justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={deletingReviewId === rev.id}
+                                onClick={() => handleDeleteCustomerReview(rev.id)}
+                                className="px-3 py-1.5 text-xs text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 font-bold rounded-xl transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>{deletingReviewId === rev.id ? 'মুছছে...' : 'মুছুন'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Add Screenshot Review Modal */}
+                {showAddScreenshotModal && (
+                  <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-lg rounded-3xl border border-[#E8E2D8] shadow-2xl p-6 space-y-5 animate-in fade-in max-h-[90vh] overflow-y-auto">
+                      <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="w-5 h-5 text-[#2D6A4F]" />
+                          <h4 className="font-extrabold text-base text-[#133E2B]">
+                            নতুন সোশ্যাল রিভিউ স্ক্রিনশট যোগ করুন
+                          </h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddScreenshotModal(false)}
+                          className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleCreateScreenshotReview} className="space-y-4">
+                        {/* 1. Image upload / URL */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-gray-700">
+                            স্ক্রিনশট ছবি আপলোড অথবা ছবির URL *
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="https://... অথবা নিচের ফাইল সিলেক্ট করুন"
+                              value={newSsForm.imageUrl}
+                              onChange={(e) => setNewSsForm({ ...newSsForm, imageUrl: e.target.value })}
+                              className="flex-1 px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                            />
+                            <label className="px-3 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-[#2D6A4F] flex items-center gap-1.5 shrink-0">
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{uploadingSsImage ? 'আপলোড হচ্ছে...' : 'ছবি বেছে নিন'}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleScreenshotImageUpload}
+                                className="hidden"
+                                disabled={uploadingSsImage}
+                              />
+                            </label>
+                          </div>
+
+                          {newSsForm.imageUrl && (
+                            <div className="mt-2 p-2 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-center justify-center">
+                              <img
+                                src={newSsForm.imageUrl}
+                                alt="Preview"
+                                className="max-h-36 object-contain rounded-lg shadow-xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. Platform */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">
+                              প্ল্যাটফর্ম
+                            </label>
+                            <select
+                              value={newSsForm.platform}
+                              onChange={(e) => setNewSsForm({ ...newSsForm, platform: e.target.value as any })}
+                              className="w-full px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                            >
+                              <option value="whatsapp">হোয়াটসঅ্যাপ (WhatsApp)</option>
+                              <option value="facebook">ফেসবুক (Facebook)</option>
+                              <option value="messenger">মেসেঞ্জার (Messenger)</option>
+                              <option value="google">গুগল রিভিউ (Google)</option>
+                              <option value="other">অন্যান্য (Other)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">
+                              রেটিং
+                            </label>
+                            <select
+                              value={newSsForm.rating}
+                              onChange={(e) => setNewSsForm({ ...newSsForm, rating: Number(e.target.value) })}
+                              className="w-full px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                            >
+                              <option value={5}>⭐⭐⭐⭐⭐ (৫.০)</option>
+                              <option value={4}>⭐⭐⭐⭐ (৪.০)</option>
+                              <option value={3}>⭐⭐⭐ (৩.০)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* 3. Customer Name & Title */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">
+                              কাস্টমারের নাম
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="যেমন: তানভীর আহমেদ"
+                              value={newSsForm.customerName}
+                              onChange={(e) => setNewSsForm({ ...newSsForm, customerName: e.target.value })}
+                              className="w-full px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">
+                              শিরোনাম
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="যেমন: সরিষার তেলের চমৎকার রিভিউ"
+                              value={newSsForm.title}
+                              onChange={(e) => setNewSsForm({ ...newSsForm, title: e.target.value })}
+                              className="w-full px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                            />
+                          </div>
+                        </div>
+
+                        {/* 4. Caption Quote */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 mb-1">
+                            ক্যাপশন / চ্যাটের মূল উক্তি
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="যেমন: 'তেলটা পেয়েছি, আসল কাঠের ঘানির ঝাঁজ ও স্বাদ অসাধারণ! ধন্যবাদ আমার ঘর অনলাইন।' "
+                            value={newSsForm.caption}
+                            onChange={(e) => setNewSsForm({ ...newSsForm, caption: e.target.value })}
+                            className="w-full px-3 py-2 text-xs border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                          />
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E2D8]">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddScreenshotModal(false)}
+                            className="px-4 py-2 border border-[#DDD5C7] text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50"
+                          >
+                            বাতিল
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={savingScreenshot}
+                            className="px-5 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl hover:bg-[#2D6A4F] shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{savingScreenshot ? 'সংরক্ষণ হচ্ছে...' : 'স্ক্রিনশট সংরক্ষণ করুন'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab: Store Settings */}
             {activeTab === 'settings' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                 <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-2xl border border-[#E8E2D8] space-y-6">

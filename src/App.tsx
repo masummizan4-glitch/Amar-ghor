@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, CartItem, Language, SiteSettings, Order } from './types';
+import { Product, CartItem, Language, SiteSettings, Order, CustomerReview, ScreenshotReview } from './types';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { CategoryBar } from './components/CategoryBar';
@@ -15,13 +15,23 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { HomeDecorSection } from './components/HomeDecorSection';
 import { AboutSection } from './components/AboutSection';
 import { ContactSection } from './components/ContactSection';
+import { ReviewsSection } from './components/ReviewsSection';
+import { ScreenshotReviewsSlider } from './components/ScreenshotReviewsSlider';
 import { Footer } from './components/Footer';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { AdminDashboard } from './components/AdminDashboard';
-import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X } from 'lucide-react';
+import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X, Star } from 'lucide-react';
 import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight } from './utils/formatters';
 import { INITIAL_PRODUCTS } from './data/defaultProducts';
-import { loadProductsFromCloud, loadSettingsFromCloud } from './lib/clientFirebase';
+import { INITIAL_REVIEWS, INITIAL_SCREENSHOT_REVIEWS } from './data/defaultReviews';
+import { 
+  loadProductsFromCloud, 
+  loadSettingsFromCloud, 
+  loadReviewsFromCloud, 
+  saveReviewToCloud, 
+  loadScreenshotReviewsFromCloud,
+  saveScreenshotReviewsToCloud
+} from './lib/clientFirebase';
 
 const DEFAULT_SITE_SETTINGS: SiteSettings = {
   brandNameBn: 'আমার ঘর Online',
@@ -57,6 +67,8 @@ const DEFAULT_SITE_SETTINGS: SiteSettings = {
     showCategoryBar: true,
     showHomeDecorSection: true,
     showTrustBanner: true,
+    showReviewsSection: true,
+    showScreenshotReviews: true,
     showAboutSection: true,
     showContactSection: true,
     showFloatingWhatsApp: true,
@@ -152,22 +164,30 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  // Reviews & Screenshot Reviews State
+  const [reviews, setReviews] = useState<CustomerReview[]>(INITIAL_REVIEWS);
+  const [screenshotReviews, setScreenshotReviews] = useState<ScreenshotReview[]>(INITIAL_SCREENSHOT_REVIEWS);
+
   // Sync cart to localStorage
   useEffect(() => {
     localStorage.setItem('amarghor_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // Fetch Products & Settings from API, Cloud Firestore, or Static Fallback
+  // Fetch Products, Settings, Reviews from API or Cloud Firestore
   const loadData = async () => {
     try {
       let fetchedProds: Product[] | null = null;
       let fetchedSett: Partial<SiteSettings> | null = null;
+      let fetchedRevs: CustomerReview[] | null = null;
+      let fetchedScreenshots: ScreenshotReview[] | null = null;
 
-      // 1. First attempt Node / Express backend API (Cloud Run / VPS / Local Dev)
+      // 1. Attempt Node / Express backend API
       try {
-        const [prodRes, settRes] = await Promise.all([
+        const [prodRes, settRes, revRes, ssRes] = await Promise.all([
           fetch('/api/products').catch(() => null),
-          fetch('/api/settings').catch(() => null)
+          fetch('/api/settings').catch(() => null),
+          fetch('/api/reviews').catch(() => null),
+          fetch('/api/screenshot-reviews').catch(() => null)
         ]);
 
         if (prodRes && prodRes.ok) {
@@ -189,11 +209,31 @@ export default function App() {
             }
           }
         }
+
+        if (revRes && revRes.ok) {
+          const contentType = revRes.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const revData = await revRes.json();
+            if (Array.isArray(revData) && revData.length > 0) {
+              fetchedRevs = revData;
+            }
+          }
+        }
+
+        if (ssRes && ssRes.ok) {
+          const contentType = ssRes.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const ssData = await ssRes.json();
+            if (Array.isArray(ssData) && ssData.length > 0) {
+              fetchedScreenshots = ssData;
+            }
+          }
+        }
       } catch (e) {
         console.warn('[App] Express API unreachable, checking cloud/static:', e);
       }
 
-      // 2. If API was unavailable (e.g. running statically on Netlify), query Cloud Firestore directly
+      // 2. Cloud Firestore fallbacks (Netlify / Static mode)
       if (!fetchedProds || fetchedProds.length === 0) {
         const cloudProds = await loadProductsFromCloud().catch(() => null);
         if (cloudProds && cloudProds.length > 0) {
@@ -208,6 +248,20 @@ export default function App() {
         }
       }
 
+      if (!fetchedRevs || fetchedRevs.length === 0) {
+        const cloudRevs = await loadReviewsFromCloud().catch(() => null);
+        if (cloudRevs && cloudRevs.length > 0) {
+          fetchedRevs = cloudRevs;
+        }
+      }
+
+      if (!fetchedScreenshots || fetchedScreenshots.length === 0) {
+        const cloudSS = await loadScreenshotReviewsFromCloud().catch(() => null);
+        if (cloudSS && cloudSS.length > 0) {
+          fetchedScreenshots = cloudSS;
+        }
+      }
+
       // 3. Apply state
       if (fetchedProds && fetchedProds.length > 0) {
         setProducts(fetchedProds);
@@ -218,11 +272,59 @@ export default function App() {
       if (fetchedSett) {
         setSettings((prev) => ({ ...prev, ...fetchedSett }));
       }
+
+      if (fetchedRevs && fetchedRevs.length > 0) {
+        setReviews(fetchedRevs);
+      }
+
+      if (fetchedScreenshots && fetchedScreenshots.length > 0) {
+        setScreenshotReviews(fetchedScreenshots);
+      }
     } catch (err) {
       console.warn('loadData fallback error:', err);
       setProducts(INITIAL_PRODUCTS);
     } finally {
       setLoadingProducts(false);
+    }
+  };
+
+  // Handler for adding a new customer review
+  const handleAddReview = async (newRev: Omit<CustomerReview, 'id' | 'createdAt'>): Promise<boolean> => {
+    const reviewObj: CustomerReview = {
+      ...newRev,
+      id: `rev-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      // 1. Try server API
+      let saved = false;
+      try {
+        const res = await fetch('/api/reviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newRev)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.review) {
+            setReviews((prev) => [data.review, ...prev]);
+            saved = true;
+          }
+        }
+      } catch {
+        // API offline
+      }
+
+      // 2. Cloud Firestore fallback
+      if (!saved) {
+        await saveReviewToCloud(reviewObj).catch(() => {});
+        setReviews((prev) => [reviewObj, ...prev]);
+      }
+      return true;
+    } catch (e) {
+      console.error('Failed to add review:', e);
+      return false;
     }
   };
 
@@ -623,6 +725,24 @@ export default function App() {
               </section>
             )}
 
+            {/* Social Proof Screenshot Reviews Slider */}
+            {settings.features?.showScreenshotReviews !== false && screenshotReviews.length > 0 && (
+              <ScreenshotReviewsSlider
+                lang={lang}
+                reviews={screenshotReviews}
+              />
+            )}
+
+            {/* Customer Reviews & Feedback Section */}
+            {settings.features?.showReviewsSection !== false && (
+              <ReviewsSection
+                lang={lang}
+                reviews={reviews}
+                onAddReview={handleAddReview}
+                products={products}
+              />
+            )}
+
             {/* About Us Narrative Snippet */}
             {settings.features?.showAboutSection !== false && (
               <AboutSection lang={lang} settings={settings} />
@@ -776,6 +896,22 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB: REVIEWS */}
+        {activeTab === 'reviews' && (
+          <div className="py-6 space-y-6">
+            <ScreenshotReviewsSlider
+              lang={lang}
+              reviews={screenshotReviews}
+            />
+            <ReviewsSection
+              lang={lang}
+              reviews={reviews}
+              onAddReview={handleAddReview}
+              products={products}
+            />
+          </div>
+        )}
+
         {/* TAB: ABOUT US */}
         {activeTab === 'about' && (
           <div className="py-6">
@@ -810,6 +946,7 @@ export default function App() {
       {/* 5. Product Details Modal */}
       {selectedProduct && (
         <ProductDetailsModal
+          key={selectedProduct.id}
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           lang={lang}
@@ -848,14 +985,20 @@ export default function App() {
       />
 
       {/* 8. Admin Control Dashboard */}
-      <AdminDashboard
-        isOpen={adminOpen}
-        onClose={() => setAdminOpen(false)}
-        products={products}
-        onRefreshProducts={loadData}
-        settings={settings}
-        onUpdateSettings={(newSettings) => setSettings((prev) => ({ ...prev, ...newSettings }))}
-      />
+      {adminOpen && (
+        <AdminDashboard
+          isOpen={adminOpen}
+          onClose={() => setAdminOpen(false)}
+          products={products}
+          onRefreshProducts={loadData}
+          settings={settings}
+          onUpdateSettings={(newSettings) => setSettings((prev) => ({ ...prev, ...newSettings }))}
+          reviews={reviews}
+          onRefreshReviews={loadData}
+          screenshotReviews={screenshotReviews}
+          onRefreshScreenshotReviews={loadData}
+        />
+      )}
     </div>
   );
 }

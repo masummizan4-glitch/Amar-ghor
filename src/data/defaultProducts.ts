@@ -175,7 +175,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     images: ['https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/1790509356678.jpg'],
     storageBn: 'আলো থেকে দূরে স্বাভাবিক তাপমাত্রায় রাখুন।',
     storageEn: 'Store away from direct sunlight at room temperature.',
-    weightOptions: ['500g', '1kg', '2kg', '5kg'],
+    weightOptions: ['1kg', '5kg'],
     featured: true
   },
   {

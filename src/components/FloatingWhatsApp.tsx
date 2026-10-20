@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MessageCircle, Phone, X } from 'lucide-react';
 import { Language } from '../types';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface FloatingWhatsAppProps {
   phone: string;
@@ -46,6 +47,7 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({ phone, lang 
               )}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => playWhatsAppPingSound()}
               className="w-full py-2 px-3 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-xs"
             >
               <MessageCircle className="w-4 h-4 fill-current" />
@@ -75,7 +77,10 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({ phone, lang 
         </a>
 
         <button
-          onClick={() => setOpenPopup(!openPopup)}
+          onClick={() => {
+            playWhatsAppPingSound();
+            setOpenPopup(!openPopup);
+          }}
           className="p-3.5 bg-[#25D366] text-white rounded-full shadow-xl hover:bg-[#1EBE5D] active:scale-95 transition-all flex items-center justify-center relative group"
           title="WhatsApp Order"
           aria-label="WhatsApp Support"

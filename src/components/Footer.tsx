@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Phone, MessageCircle, MapPin, Mail, ShieldCheck, X, Lock } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface FooterProps {
   lang: Language;
@@ -148,6 +149,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, settings, onNavigate, onOp
                   href={`https://wa.me/88${settings.whatsapp}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => playWhatsAppPingSound()}
                   className="hover:text-white transition-colors"
                 >
                   WhatsApp: {settings.whatsapp}

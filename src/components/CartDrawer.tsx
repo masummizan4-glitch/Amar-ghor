@@ -3,6 +3,7 @@ import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, MessageCircle, Truck, 
 import { CartItem, Language, SiteSettings } from '../types';
 import { formatPrice, createWhatsAppCartUrl, toBnNumber, calculateItemPrice, formatWeightLabel, isWeightBasedProduct, extractProductPackWeight } from '../utils/formatters';
 import { calculateDeliveryCharge } from '../utils/delivery';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -244,7 +245,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               href={whatsappCartUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-2.5 bg-[#E7F6ED] hover:bg-[#D5EFE0] text-[#133E2B] font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 border border-[#BDE5CB]"
+              onClick={() => playWhatsAppPingSound()}
+              className="w-full py-2.5 bg-[#E7F6ED] hover:bg-[#D5EFE0] active:scale-98 text-[#133E2B] font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 border border-[#BDE5CB]"
             >
               <MessageCircle className="w-4 h-4 text-[#25D366]" />
               <span>{lang === 'bn' ? 'কার্টের তালিকা সহ হোয়াটসঅ্যাপে অর্ডার' : 'Order Cart via WhatsApp'}</span>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Phone, MessageCircle, Mail, MapPin, Clock, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { saveContactToCloud } from '../lib/clientFirebase';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface ContactSectionProps {
   lang: Language;
@@ -114,7 +115,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang, settings }
                 href={`https://wa.me/88${settings.whatsapp}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-start gap-3.5 p-3 rounded-xl bg-[#E7F6ED] hover:bg-[#D5EFE0] transition-colors border border-[#BDE5CB]"
+                onClick={() => playWhatsAppPingSound()}
+                className="flex items-start gap-3.5 p-3 rounded-xl bg-[#E7F6ED] hover:bg-[#D5EFE0] active:scale-98 transition-all border border-[#BDE5CB]"
               >
                 <div className="p-2 bg-[#25D366] text-white rounded-lg shrink-0">
                   <MessageCircle className="w-4 h-4 fill-current" />

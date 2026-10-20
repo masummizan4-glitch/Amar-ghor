@@ -147,7 +147,7 @@ const DEFAULT_PRODUCTS = [
     images: ['https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006037/1790509356678.jpg'],
     storageBn: 'আলো থেকে দূরে স্বাভাবিক তাপমাত্রায় রাখুন।',
     storageEn: 'Store away from direct sunlight at room temperature.',
-    weightOptions: ['500g', '1kg', '2kg', '5kg'],
+    weightOptions: ['1kg', '5kg'],
     featured: true
   },
   {
@@ -1200,6 +1200,209 @@ app.get('/api/contact', async (req, res) => {
     }
     const db = await readDB();
     res.json(db.contacts || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4.1 Reviews API
+const DEFAULT_INITIAL_REVIEWS = [
+  {
+    id: 'rev-1',
+    name: 'তানভীর আহমেদ',
+    district: 'ঢাকা (Dhaka)',
+    rating: 5,
+    comment: 'আলহামদুলিল্লাহ, চাক ভাঙ্গা সুন্দরবনের মধুটা সত্যি অসাধারণ! ঘ্রাণ আর স্বাদেই বোঝা যায় আসল প্রাকৃতিক মধু। পরিবারের সবাই খুব পছন্দ করেছে।',
+    productName: 'প্রাকৃতিক চাক ভাঙ্গা মধু',
+    verifiedPurchase: true,
+    createdAt: '2026-10-15T14:30:00.000Z',
+    approved: true
+  },
+  {
+    id: 'rev-2',
+    name: 'রফিকুল ইসলাম',
+    district: 'চট্টগ্রাম (Chattogram)',
+    rating: 5,
+    comment: 'ঘানি ভাঙ্গা সরিষার তেলের আসল ঝাঁজ অনেক দিন পর পেলাম। রান্নায় চমৎকার সুবাস ও স্বাদ এনে দেয়। ডেলিভারিও খুব দ্রুত পেয়েছি।',
+    productName: 'ঘানি ভাঙ্গা সরিষার তেল',
+    verifiedPurchase: true,
+    createdAt: '2026-10-12T10:15:00.000Z',
+    approved: true
+  },
+  {
+    id: 'rev-3',
+    name: 'আফরোজা বেগম',
+    district: 'সিলেট (Sylhet)',
+    rating: 5,
+    comment: 'গাওয়া ঘিয়ের দানাদার টেক্সচার এবং সুবাস মনে করিয়ে দেয় শৈশবের খাঁটি খাবারের কথা। কাচের জারের প্যাকিং নিখুঁত ছিল।',
+    productName: 'খাঁটি গাওয়া ঘি',
+    verifiedPurchase: true,
+    createdAt: '2026-10-09T18:45:00.000Z',
+    approved: true
+  },
+  {
+    id: 'rev-4',
+    name: 'মাহফুজুর রহমান',
+    district: 'কুমিল্লা (Cumilla)',
+    rating: 5,
+    comment: 'হানি নাটস মিক্স অর্ডার করেছিলাম। বাদামগুলো মচমচে এবং মধুর অনুপাত একদম ব্যালান্সড। শারীরিক শক্তির জন্য দারুণ উপকারী।',
+    productName: 'প্রিমিয়াম হানি নাটস',
+    verifiedPurchase: true,
+    createdAt: '2026-10-05T09:20:00.000Z',
+    approved: true
+  },
+  {
+    id: 'rev-5',
+    name: 'শারমিন সুলতানা',
+    district: 'রাজশাহী (Rajshahi)',
+    rating: 5,
+    comment: 'সৌদি সুগাই খেজুরগুলো যেমন নরম তেমনই মিষ্টি। কোনো বালু বা পোকা ছিল না, একদম ফ্রেশ বক্স। ক্যাশ অন ডেলিভারি পেয়ে ভালো লেগেছে।',
+    productName: 'স্পেশাল সৌদিয়া সুগাই খেজুর',
+    verifiedPurchase: true,
+    createdAt: '2026-09-28T16:10:00.000Z',
+    approved: true
+  }
+];
+
+const DEFAULT_INITIAL_SCREENSHOT_REVIEWS = [
+  {
+    id: 'ss-1',
+    imageUrl: '/reviews/whatsapp_review_1.jpg',
+    platform: 'whatsapp',
+    title: 'হোয়াটসঅ্যাপ চ্যাট রিভিউ',
+    caption: '“ভাইয়া আপনাদের সুন্দরবনের মধু আর গাওয়া ঘি হাতে পেয়েছি, মাশাল্লাহ স্বাদ ও ঘ্রাণ অসাধারণ খাঁটি!”',
+    customerName: 'রিনা করিম (ঢাকা)',
+    rating: 5,
+    featured: true,
+    createdAt: '2026-10-16T12:00:00.000Z'
+  },
+  {
+    id: 'ss-2',
+    imageUrl: '/reviews/facebook_review_1.jpg',
+    platform: 'facebook',
+    title: 'ফেসবুক পেজ কাস্টমার রিকমেন্ডেশন',
+    caption: '“সরিষার তেল ও খেজুর অর্ডার করেছিলাম। প্যাকেজিং খুব সুরক্ষিত ছিল এবং তেলের খাঁটি ঝাঁজ এক কথায় সেরা!”',
+    customerName: 'সুমাইয়া আক্তার (ফরিদপুর)',
+    rating: 5,
+    featured: true,
+    createdAt: '2026-10-14T08:30:00.000Z'
+  }
+];
+
+app.get('/api/reviews', async (_req, res) => {
+  try {
+    const db = await readDB();
+    if (!db.reviews || db.reviews.length === 0) {
+      db.reviews = DEFAULT_INITIAL_REVIEWS;
+      await writeDB(db);
+    }
+    res.json(db.reviews || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/reviews', async (req, res) => {
+  try {
+    const { name, district, rating, comment, productName } = req.body;
+    if (!name || !comment) {
+      return res.status(400).json({ error: 'নাম এবং মতামত আবশ্যক।' });
+    }
+    const db = await readDB();
+    db.reviews = db.reviews || [...DEFAULT_INITIAL_REVIEWS];
+
+    const newReview = {
+      id: `rev-${Date.now()}`,
+      name: String(name).trim(),
+      district: district ? String(district).trim() : 'ঢাকা (Dhaka)',
+      rating: Number(rating) || 5,
+      comment: String(comment).trim(),
+      productName: productName ? String(productName).trim() : 'সাধারণ কেনাকাটা',
+      verifiedPurchase: true,
+      createdAt: new Date().toISOString(),
+      approved: true
+    };
+
+    db.reviews.unshift(newReview);
+    await writeDB(db);
+    res.status(201).json({ success: true, review: newReview });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/reviews/:id', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const db = await readDB();
+    db.reviews = (db.reviews || []).filter((r: any) => r.id !== req.params.id);
+    await writeDB(db);
+    res.json({ success: true, message: 'Review deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4.2 Screenshot Reviews API
+app.get('/api/screenshot-reviews', async (_req, res) => {
+  try {
+    const db = await readDB();
+    if (!db.screenshotReviews || db.screenshotReviews.length === 0) {
+      db.screenshotReviews = DEFAULT_INITIAL_SCREENSHOT_REVIEWS;
+      await writeDB(db);
+    }
+    res.json(db.screenshotReviews || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/screenshot-reviews', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const { imageUrl, platform, title, caption, customerName, rating } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'ছবির লিংক বা আপলোড ফাইল আবশ্যক।' });
+    }
+    const db = await readDB();
+    db.screenshotReviews = db.screenshotReviews || [...DEFAULT_INITIAL_SCREENSHOT_REVIEWS];
+
+    const newScreenshot = {
+      id: `ss-${Date.now()}`,
+      imageUrl: String(imageUrl).trim(),
+      platform: platform || 'whatsapp',
+      title: title ? String(title).trim() : 'কাস্টমার রিভিউ স্ক্রিনশট',
+      caption: caption ? String(caption).trim() : '',
+      customerName: customerName ? String(customerName).trim() : 'সন্তুষ্ট কাস্টমার',
+      rating: Number(rating) || 5,
+      featured: true,
+      createdAt: new Date().toISOString()
+    };
+
+    db.screenshotReviews.unshift(newScreenshot);
+    await writeDB(db);
+    res.status(201).json({ success: true, screenshotReview: newScreenshot });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/screenshot-reviews/:id', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const db = await readDB();
+    db.screenshotReviews = (db.screenshotReviews || []).filter((s: any) => s.id !== req.params.id);
+    await writeDB(db);
+    res.json({ success: true, message: 'Screenshot review deleted' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

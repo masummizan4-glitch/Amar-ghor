@@ -108,6 +108,30 @@ export interface ContactMessage {
   createdAt: string;
 }
 
+export interface CustomerReview {
+  id: string;
+  name: string;
+  district?: string;
+  rating: number; // 1 to 5
+  comment: string;
+  productName?: string;
+  verifiedPurchase?: boolean;
+  createdAt: string;
+  approved?: boolean;
+}
+
+export interface ScreenshotReview {
+  id: string;
+  imageUrl: string;
+  platform: 'whatsapp' | 'facebook' | 'messenger' | 'google' | 'other';
+  title?: string;
+  caption?: string;
+  customerName?: string;
+  rating?: number;
+  featured?: boolean;
+  createdAt: string;
+}
+
 export interface SiteFeatures {
   showAnnouncement?: boolean;
   showLanguageSwitcher?: boolean;
@@ -117,6 +141,8 @@ export interface SiteFeatures {
   showCategoryBar?: boolean;
   showHomeDecorSection?: boolean;
   showTrustBanner?: boolean;
+  showReviewsSection?: boolean;
+  showScreenshotReviews?: boolean;
   showAboutSection?: boolean;
   showContactSection?: boolean;
   showFloatingWhatsApp?: boolean;
@@ -187,4 +213,5 @@ export interface SiteSettings {
   blockBlacklistedDirectly?: boolean;
   minAddressLength?: number;
   maxOrdersPerPhoneDay?: number;
+  screenshotReviews?: ScreenshotReview[];
 }

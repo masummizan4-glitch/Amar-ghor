@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles, MessageCircle, ArrowRight } from 'lucide-react';
 import { Product, Language } from '../types';
 import { ProductCard } from './ProductCard';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface HomeDecorSectionProps {
   products: Product[];
@@ -53,7 +54,8 @@ export const HomeDecorSection: React.FC<HomeDecorSectionProps> = ({
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#E8C547] text-[#133E2B] font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm"
+                onClick={() => playWhatsAppPingSound()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#E8C547] active:scale-95 text-[#133E2B] font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm"
               >
                 <MessageCircle className="w-4 h-4 fill-current" />
                 <span>{lang === 'bn' ? 'কাস্টম ডেকোর পরামর্শ চান?' : 'Need Custom Decor Advice?'}</span>

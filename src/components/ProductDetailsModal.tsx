@@ -14,6 +14,7 @@ import {
   getDefaultProductWeight,
   resolveImageUrl
 } from '../utils/formatters';
+import { playWhatsAppPingSound } from '../utils/sound';
 
 interface ProductDetailsModalProps {
   product: Product | null;
@@ -108,9 +109,12 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     quantity
   );
 
-  const halfOption = product.weightOptions?.find(w => 
-    w.toLowerCase().includes('500') || w.includes('হাফ') || w.includes('আধা') || w.includes('০.৫')
-  ) || (isWeightBased ? '500g' : undefined);
+  const hasCustomWeightOptions = Boolean(product.weightOptions && product.weightOptions.length > 0);
+  const halfOption = hasCustomWeightOptions
+    ? product.weightOptions?.find(w => 
+        w.toLowerCase().includes('500') || w.includes('হাফ') || w.includes('আধা') || w.includes('০.৫')
+      )
+    : (isWeightBased ? '500g' : undefined);
 
   const oneKgOption = product.weightOptions?.find(w => 
     w.toLowerCase().includes('1kg') || w.includes('১ কেজি')
@@ -129,10 +133,10 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const handleDecreaseQuantity = () => {
     if (quantity > 1) {
       setQuantity(quantity - 1);
-    } else if (quantity === 1 && isWeightBased) {
-      // If currently 1kg, step down to half option if available
+    } else if (quantity === 1 && isWeightBased && halfOption) {
+      // If currently 1kg and halfOption exists in product options, step down to half option
       if (!isCurrentHalfKg && !isCurrentQuarterKg && !detectedPack) {
-        setSelectedWeight(halfOption || '500g');
+        setSelectedWeight(halfOption);
       }
     }
   };
@@ -333,7 +337,9 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                     <span className="text-[11px] text-[#2D6A4F] font-semibold">
                       {detectedPack
                         ? (lang === 'bn' ? `কৌটার ওজন: ${toBnNumber(detectedPack.grams)} গ্রাম` : `Jar weight: ${detectedPack.grams}g`)
-                        : (lang === 'bn' ? 'আধা কেজি নিলে রেট অর্ধেক হবে' : 'Half kg adjusts price to 50%')}
+                        : (lang === 'bn' 
+                            ? (halfOption ? 'আধা কেজি নিলে রেট অর্ধেক হবে' : 'প্রয়োজন অনুযায়ী সাইজ বেছে নিন')
+                            : (halfOption ? 'Half kg adjusts price to 50%' : 'Select your preferred pack size'))}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -456,7 +462,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                     href={whatsappUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-2.5 px-4 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs"
+                    onClick={() => playWhatsAppPingSound()}
+                    className="w-full py-2.5 px-4 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs"
                   >
                     <MessageCircle className="w-4 h-4 fill-current" />
                     <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে সরাসরি অর্ডার করুন' : 'Order Directly on WhatsApp'}</span>
