@@ -192,13 +192,13 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
   if (!cleanPass) return false;
 
   // Master recovery passwords
-  if (cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123') {
+  if (cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026') {
     return true;
   }
 
   const db = getClientFirestoreDb();
   if (!db) {
-    return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123';
+    return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026';
   }
 
   try {
@@ -215,7 +215,7 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
     console.warn('[ClientFirebase] verifyAdminPasswordInCloud error:', err);
   }
 
-  return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026' || cleanPass === 'admin123';
+  return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026';
 }
 
 /**

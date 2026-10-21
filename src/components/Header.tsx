@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ShoppingBag, Search, Phone, Menu, X, ShieldCheck, HeartHandshake, Lock, Type, ArrowRight, Sparkles } from 'lucide-react';
+import { ShoppingBag, Search, Phone, Menu, X, ShieldCheck, HeartHandshake, Type, ArrowRight, Sparkles } from 'lucide-react';
 import { Language, SiteSettings, Product } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { formatPrice, toBnNumber, matchProductSearch } from '../utils/formatters';
@@ -10,7 +10,7 @@ interface HeaderProps {
   onLanguageChange: (lang: Language) => void;
   cartCount: number;
   onOpenCart: () => void;
-  onOpenAdmin: () => void;
+  onOpenAdmin?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   activeTab: string;
@@ -425,17 +425,6 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Admin Entry Button */}
-            <button
-              onClick={onOpenAdmin}
-              className="p-2 sm:px-2.5 sm:py-1.5 text-gray-600 hover:text-[#133E2B] hover:bg-[#F2EDE4] rounded-lg transition-colors flex items-center gap-1 text-xs font-bold border border-transparent hover:border-[#DDD5C7]"
-              title={lang === 'bn' ? 'অ্যাডমিন প্যানেল (Admin Login)' : 'Admin Panel'}
-              aria-label="Admin Dashboard"
-            >
-              <Lock className="w-3.5 h-3.5 text-[#2D6A4F]" />
-              <span className="hidden xl:inline text-[11px]">{lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}</span>
-            </button>
-
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -651,19 +640,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 WhatsApp Order
               </a>
-            </div>
-
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAdmin();
-                }}
-                className="w-full py-2.5 px-3 bg-[#FAF8F5] hover:bg-[#E8EFE9] text-[#133E2B] font-bold text-xs rounded-xl border border-[#DDD5C7] flex items-center justify-center gap-2 transition-colors"
-              >
-                <Lock className="w-3.5 h-3.5 text-[#2D6A4F]" />
-                <span>{lang === 'bn' ? 'অ্যাডমিন প্যানেল (Admin Login)' : 'Admin Dashboard'}</span>
-              </button>
             </div>
           </div>
         </div>

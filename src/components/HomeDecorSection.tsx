@@ -101,8 +101,8 @@ export const HomeDecorSection: React.FC<HomeDecorSectionProps> = ({
             </h3>
             <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
               {lang === 'bn'
-                ? 'আমরা আমাদের হস্তশিল্প ও নান্দনিক হোম ডেকোর সংগ্রহশালাটি সাজাচ্ছি। অ্যাডমিন প্যানেল থেকে যেকোনো সময় নতুন ডেকোর পণ্য যুক্ত করা যাবে।'
-                : 'We are curating artisan-crafted home decor items. Products can also be added anytime via the Admin Dashboard.'}
+                ? 'আমরা আমাদের হস্তশিল্প ও নান্দনিক হোম ডেকোর সংগ্রহশালাটি সাজাচ্ছি। খুব শীঘ্রই দারুণ সব ঐতিহ্যবাহী ডেকোর পণ্য যুক্ত করা হবে।'
+                : 'We are curating artisan-crafted home decor items. New exclusive products will be arriving very soon.'}
             </p>
             <div className="pt-2">
               <a

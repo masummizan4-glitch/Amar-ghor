@@ -14,10 +14,10 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({ phone, lang 
   const intPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone}`;
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2">
+    <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-40 flex flex-col items-end gap-2 safe-pb">
       {/* Quick chat popup helper */}
       {openPopup && (
-        <div className="bg-white rounded-2xl shadow-2xl border border-[#DDD5C7] p-4 w-72 mb-2 animate-in slide-in-from-bottom-3 duration-200 text-gray-800">
+        <div className="bg-white rounded-2xl shadow-2xl border border-[#DDD5C7] p-4 w-[calc(100vw-2rem)] max-w-xs sm:w-72 mb-2 animate-in slide-in-from-bottom-3 duration-200 text-gray-800">
           <div className="flex items-center justify-between border-b border-[#F2EDE4] pb-2 mb-3">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />

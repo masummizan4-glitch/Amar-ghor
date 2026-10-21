@@ -328,14 +328,40 @@ export default function App() {
     }
   };
 
+  const handleCloseAdmin = () => {
+    setAdminOpen(false);
+    // Clear secret admin identifiers from address bar if present
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+    if (hash.includes('admin') || search.includes('admin') || path.includes('secret-admin')) {
+      window.history.replaceState(null, '', path.includes('secret-admin') ? '/' : window.location.pathname);
+    }
+  };
+
   useEffect(() => {
     loadData();
 
-    // Check if user navigated to /admin or #admin
+    // Secure URL route checker for Admin Panel
     const handleUrlRoute = () => {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
-      if (path === '/admin' || hash === '#admin') {
+      const search = window.location.search.toLowerCase();
+
+      // 1. Explicitly BLOCK public guessable paths like /admin or #admin
+      if (path === '/admin' || path === '/admin/' || hash === '#admin') {
+        window.history.replaceState(null, '', window.location.pathname.replace(/\/admin\/?$/i, '') || '/');
+        return;
+      }
+
+      // 2. Secret link triggers (strictly requires secret token/query/hash)
+      if (
+        hash === '#amarghor-secret-admin-992' ||
+        hash === '#secret-admin-access-992' ||
+        search.includes('secret_admin=amarghor992') ||
+        search.includes('panel=secret_admin_992') ||
+        path === '/secret-admin-access-992'
+      ) {
         setAdminOpen(true);
       }
     };
@@ -343,9 +369,20 @@ export default function App() {
     handleUrlRoute();
     window.addEventListener('popstate', handleUrlRoute);
     window.addEventListener('hashchange', handleUrlRoute);
+
+    // Secret shortcut for owner: Ctrl+Shift+A (or Cmd+Shift+A)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        setAdminOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       window.removeEventListener('popstate', handleUrlRoute);
       window.removeEventListener('hashchange', handleUrlRoute);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -988,7 +1025,7 @@ export default function App() {
       {adminOpen && (
         <AdminDashboard
           isOpen={adminOpen}
-          onClose={() => setAdminOpen(false)}
+          onClose={handleCloseAdmin}
           products={products}
           onRefreshProducts={loadData}
           settings={settings}

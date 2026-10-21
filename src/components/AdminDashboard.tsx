@@ -1235,7 +1235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 অ্যাডমিন প্রবেশাধিকার
               </h3>
               <p className="text-xs text-gray-600 mt-1">
-                মালিক ও ব্যবস্থাপকদের জন্য নিরাপদ ড্যাশবোর্ড (ডিফল্ট পাসওয়ার্ড: <code className="bg-gray-200 px-1 py-0.5 rounded text-gray-800 font-mono">admin123</code>)
+                মালিক ও অনুমোদিত ব্যবস্থাপকদের জন্য সুরক্ষিত ড্যাশবোর্ড
               </p>
             </div>
 

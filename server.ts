@@ -1418,8 +1418,7 @@ app.post('/api/admin/login', async (req, res) => {
     if (
       enteredPassword === correctPassword ||
       enteredPassword === 'Masum@1992' ||
-      enteredPassword === 'amarghor2026' ||
-      enteredPassword === 'admin123'
+      enteredPassword === 'amarghor2026'
     ) {
       res.json({
         success: true,

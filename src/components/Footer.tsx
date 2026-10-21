@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Phone, MessageCircle, MapPin, Mail, ShieldCheck, X, Lock } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Phone, MessageCircle, MapPin, Mail, ShieldCheck, X } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { playWhatsAppPingSound } from '../utils/sound';
@@ -13,6 +13,22 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ lang, settings, onNavigate, onOpenAdmin }) => {
   const [activePolicy, setActivePolicy] = useState<string | null>(null);
+  const clickCountRef = useRef(0);
+  const lastClickRef = useRef(0);
+
+  const handleSecretCopyrightClick = () => {
+    const now = Date.now();
+    if (now - lastClickRef.current < 2500) {
+      clickCountRef.current += 1;
+      if (clickCountRef.current >= 5) {
+        clickCountRef.current = 0;
+        onOpenAdmin?.();
+      }
+    } else {
+      clickCountRef.current = 1;
+    }
+    lastClickRef.current = now;
+  };
 
   const policies: Record<string, { titleBn: string; titleEn: string; contentBn: string; contentEn: string }> = {
     privacy: {
@@ -102,17 +118,6 @@ export const Footer: React.FC<FooterProps> = ({ lang, settings, onNavigate, onOp
                   {lang === 'bn' ? 'যোগাযোগ' : 'Contact'}
                 </button>
               </li>
-              {onOpenAdmin && (
-                <li className="pt-1 border-t border-emerald-800/60">
-                  <button
-                    onClick={onOpenAdmin}
-                    className="text-[#E8C547] hover:text-white transition-colors flex items-center gap-1.5 font-bold"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>{lang === 'bn' ? 'অ্যাডমিন লগইন' : 'Admin Login'}</span>
-                  </button>
-                </li>
-              )}
             </ul>
           </div>
 
@@ -201,7 +206,10 @@ export const Footer: React.FC<FooterProps> = ({ lang, settings, onNavigate, onOp
             </button>
           </div>
 
-          <div className="text-center sm:text-right text-[11px] text-emerald-400">
+          <div
+            onClick={handleSecretCopyrightClick}
+            className="text-center sm:text-right text-[11px] text-emerald-400 select-none cursor-default"
+          >
             © {new Date().getFullYear()} আমার ঘর Online (Amar Ghor Online). All rights reserved.
           </div>
         </div>

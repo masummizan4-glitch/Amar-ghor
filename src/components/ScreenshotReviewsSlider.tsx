@@ -18,6 +18,7 @@ export const ScreenshotReviewsSlider: React.FC<ScreenshotReviewsSliderProps> = (
   const [lightboxImage, setLightboxImage] = useState<ScreenshotReview | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartXRef = useRef<number>(0);
 
   const total = reviews?.length || 0;
 
@@ -29,6 +30,23 @@ export const ScreenshotReviewsSlider: React.FC<ScreenshotReviewsSliderProps> = (
   const prevSlide = () => {
     if (total === 0) return;
     setCurrentIndex((prev) => (prev - 1 + total) % total);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    setIsPaused(true);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    setIsPaused(false);
+    const diff = touchStartXRef.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0) {
+        nextSlide();
+      } else {
+        prevSlide();
+      }
+    }
   };
 
   // Auto-slide effect
@@ -102,9 +120,11 @@ export const ScreenshotReviewsSlider: React.FC<ScreenshotReviewsSliderProps> = (
 
         {/* Carousel Container */}
         <div
-          className="relative max-w-4xl mx-auto bg-white rounded-3xl border border-[#E8E2D8] shadow-lg overflow-hidden group"
+          className="relative max-w-4xl mx-auto bg-white rounded-3xl border border-[#E8E2D8] shadow-lg overflow-hidden group select-none"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           <div className="grid grid-cols-1 md:grid-cols-12 min-h-[380px] sm:min-h-[440px]">
             

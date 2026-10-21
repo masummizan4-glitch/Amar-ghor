@@ -86,21 +86,21 @@ export const Hero: React.FC<HeroProps> = ({
             </div>
 
             {/* Trust Highlights Checklist */}
-            <div className="grid grid-cols-3 gap-2 pt-6 border-t border-[#E8E2D8] text-xs text-gray-700">
-              <div className="flex flex-col items-center lg:items-start gap-1">
-                <ShieldCheck className="w-5 h-5 text-[#2D6A4F]" />
-                <span className="font-semibold text-gray-900">{lang === 'bn' ? 'শতভাগ নির্ভেজাল' : '100% Authentic'}</span>
-                <span className="text-[11px] text-gray-500">{lang === 'bn' ? 'সরাসরি বিশ্বস্ত উৎস' : 'Direct from Source'}</span>
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-3 pt-6 border-t border-[#E8E2D8] text-[11px] sm:text-xs text-gray-700">
+              <div className="flex flex-col items-center lg:items-start text-center lg:text-left gap-1">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-[#2D6A4F] shrink-0" />
+                <span className="font-semibold text-gray-900 leading-tight">{lang === 'bn' ? 'শতভাগ নির্ভেজাল' : '100% Authentic'}</span>
+                <span className="text-[10px] sm:text-[11px] text-gray-500 hidden min-[360px]:inline">{lang === 'bn' ? 'সরাসরি বিশ্বস্ত উৎস' : 'Direct from Source'}</span>
               </div>
-              <div className="flex flex-col items-center lg:items-start gap-1">
-                <Truck className="w-5 h-5 text-[#2D6A4F]" />
-                <span className="font-semibold text-gray-900">{lang === 'bn' ? 'সারাদেশে হোম ডেলিভারি' : 'Countrywide Delivery'}</span>
-                <span className="text-[11px] text-gray-500">{lang === 'bn' ? 'দ্রুত নিরাপদ সরবরাহ' : 'Fast & Secure'}</span>
+              <div className="flex flex-col items-center lg:items-start text-center lg:text-left gap-1">
+                <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-[#2D6A4F] shrink-0" />
+                <span className="font-semibold text-gray-900 leading-tight">{lang === 'bn' ? 'হোম ডেলিভারি' : 'Home Delivery'}</span>
+                <span className="text-[10px] sm:text-[11px] text-gray-500 hidden min-[360px]:inline">{lang === 'bn' ? 'সারাদেশে সরবরাহ' : 'Countrywide Delivery'}</span>
               </div>
-              <div className="flex flex-col items-center lg:items-start gap-1">
-                <RefreshCw className="w-5 h-5 text-[#2D6A4F]" />
-                <span className="font-semibold text-gray-900">{lang === 'bn' ? 'ক্যাশ অন ডেলিভারি' : 'Cash on Delivery'}</span>
-                <span className="text-[11px] text-gray-500">{lang === 'bn' ? 'পণ্য হাতে পেয়ে মূল্য' : 'Pay After Inspection'}</span>
+              <div className="flex flex-col items-center lg:items-start text-center lg:text-left gap-1">
+                <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 text-[#2D6A4F] shrink-0" />
+                <span className="font-semibold text-gray-900 leading-tight">{lang === 'bn' ? 'ক্যাশ অন ডেলিভারি' : 'Cash on Delivery'}</span>
+                <span className="text-[10px] sm:text-[11px] text-gray-500 hidden min-[360px]:inline">{lang === 'bn' ? 'পণ্য দেখে মূল্য পরিশোধ' : 'Pay After Inspection'}</span>
               </div>
             </div>
           </div>
