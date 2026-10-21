@@ -6,15 +6,16 @@ import { playWhatsAppPingSound } from '../utils/sound';
 interface FloatingWhatsAppProps {
   phone: string;
   lang: Language;
+  hasBottomBar?: boolean;
 }
 
-export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({ phone, lang }) => {
+export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({ phone, lang, hasBottomBar = false }) => {
   const [openPopup, setOpenPopup] = useState(false);
   const cleanPhone = phone.replace(/[^0-9]/g, '');
   const intPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone}`;
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-40 flex flex-col items-end gap-2 safe-pb">
+    <div className={`fixed ${hasBottomBar ? 'bottom-20 sm:bottom-6' : 'bottom-4 sm:bottom-6'} right-3 sm:right-6 z-40 flex flex-col items-end gap-2 safe-pb transition-all duration-300`}>
       {/* Quick chat popup helper */}
       {openPopup && (
         <div className="bg-white rounded-2xl shadow-2xl border border-[#DDD5C7] p-4 w-[calc(100vw-2rem)] max-w-xs sm:w-72 mb-2 animate-in slide-in-from-bottom-3 duration-200 text-gray-800">

@@ -138,12 +138,12 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* 2. Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20 gap-2 sm:gap-4">
           {/* Brand Logo */}
           <button
             onClick={() => onTabChange('home')}
-            className="text-left focus:outline-none"
+            className="text-left focus:outline-none shrink-0"
             aria-label="Amar Ghor Home"
           >
             <BrandLogo size="md" logoUrl={settings.logoUrl} mode={settings.logoDisplayMode} />
@@ -169,8 +169,8 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </nav>
 
-          {/* Right Action Icons: Search, Language Switcher, Cart, Admin */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right Action Icons: Search, Language Switcher, Cart, Hamburger */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Search Input on Desktop with Live Results Dropdown */}
             {settings.features?.showSearchBar !== false && (
               <div className="hidden md:flex relative items-center" ref={desktopSearchRef}>
@@ -189,13 +189,11 @@ export const Header: React.FC<HeaderProps> = ({
                       handleViewAllResults();
                     }
                   }}
-                  className="w-48 lg:w-64 pl-9 pr-7 py-2 text-xs bg-white border border-[#DDD5C7] rounded-full focus:outline-none focus:ring-2 focus:ring-[#2D6A4F] focus:border-transparent transition-all shadow-xs"
+                  className="w-40 lg:w-56 xl:w-64 pl-9 pr-7 py-2 text-xs bg-white border border-[#DDD5C7] rounded-full focus:outline-none focus:ring-2 focus:ring-[#2D6A4F] focus:border-transparent transition-all shadow-xs"
                 />
                 {searchQuery ? (
                   <button
-                    onClick={() => {
-                      onSearchChange('');
-                    }}
+                    onClick={() => onSearchChange('')}
                     className="absolute right-2.5 text-xs text-gray-400 hover:text-gray-700 w-4 h-4 flex items-center justify-center font-bold"
                     aria-label="Clear search"
                   >
@@ -260,11 +258,6 @@ export const Header: React.FC<HeaderProps> = ({
                             <p className="text-xs font-bold text-gray-700">
                               {lang === 'bn' ? 'কোনো পণ্য খুঁজে পাওয়া যায়নি' : 'No products found'}
                             </p>
-                            <p className="text-[11px] text-gray-500">
-                              {lang === 'bn'
-                                ? 'দয়া করে সঠিক বানানে লিখুন বা উপরের কিওয়ার্ডগুলো থেকে বাছাই করুন।'
-                                : 'Please check spelling or choose from above keywords.'}
-                            </p>
                           </div>
                         ) : (
                           searchResults.slice(0, 6).map((product) => (
@@ -292,9 +285,6 @@ export const Header: React.FC<HeaderProps> = ({
                                   <span className="text-xs font-extrabold text-[#133E2B]">
                                     {formatPrice(product.price, lang)}
                                   </span>
-                                  <span className="text-[10px] text-gray-400">
-                                    /{lang === 'bn' ? product.unitBn || 'কেজি' : product.unit || 'kg'}
-                                  </span>
                                 </div>
                               </div>
                               <span className="text-xs font-bold text-[#2D6A4F] bg-[#EAF2EC] group-hover:bg-[#133E2B] group-hover:text-white px-2.5 py-1 rounded-lg transition-colors shrink-0">
@@ -303,20 +293,6 @@ export const Header: React.FC<HeaderProps> = ({
                             </div>
                           ))
                         )}
-                      </div>
-                    )}
-
-                    {searchResults.length > 0 && searchQuery.trim() && (
-                      <div className="p-2.5 bg-[#FAF8F5] border-t border-[#E8E2D8] text-center">
-                        <button
-                          type="button"
-                          onClick={handleViewAllResults}
-                          className="w-full py-2 bg-[#133E2B] hover:bg-[#1B4332] text-white text-xs font-bold rounded-xl transition-colors shadow-xs"
-                        >
-                          {lang === 'bn'
-                            ? `সব ${searchResults.length}টি পণ্য ক্যাটাগলগে দেখুন`
-                            : `View all ${searchResults.length} products in catalog`}
-                        </button>
                       </div>
                     )}
                   </div>
@@ -328,16 +304,16 @@ export const Header: React.FC<HeaderProps> = ({
             {settings.features?.showSearchBar !== false && (
               <button
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="md:hidden p-2 text-gray-600 hover:text-[#133E2B] rounded-lg"
+                className="md:hidden p-2 text-gray-700 hover:text-[#133E2B] rounded-lg transition-colors shrink-0"
                 aria-label="Search"
               >
                 <Search className="w-5 h-5" />
               </button>
             )}
 
-            {/* Bengali Font Switcher Button */}
+            {/* Bengali Font Switcher Button (Desktop & Tablet only) */}
             {settings.features?.showFontSwitcher !== false && (
-              <div className="relative">
+              <div className="hidden md:block relative">
                 <button
                   onClick={() => setFontMenuOpen(!fontMenuOpen)}
                   className="p-1.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg border border-[#DDD5C7] bg-[#EBE5DA] hover:bg-[#DDD5C7] text-gray-800 flex items-center gap-1 transition-all"
@@ -383,9 +359,9 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Language Switcher */}
+            {/* Language Switcher (Desktop & Tablet only; on mobile it is in drawer) */}
             {settings.features?.showLanguageSwitcher !== false && (
-              <div className="flex items-center p-0.5 bg-[#EBE5DA] rounded-lg border border-[#DDD5C7]">
+              <div className="hidden sm:flex items-center p-0.5 bg-[#EBE5DA] rounded-lg border border-[#DDD5C7]">
                 <button
                   onClick={() => onLanguageChange('bn')}
                   className={`px-2 py-1 text-xs font-bold rounded-md transition-all ${
@@ -411,11 +387,12 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Cart Trigger Button */}
+            {/* Cart Trigger Button - ALWAYS VISIBLE, NEVER PUSHED OFF SCREEN */}
             <button
               onClick={onOpenCart}
-              className="relative p-2.5 bg-[#133E2B] text-white rounded-xl hover:bg-[#1B4332] active:scale-95 transition-all shadow-xs flex items-center justify-center"
+              className="relative shrink-0 p-2 sm:p-2.5 bg-[#133E2B] hover:bg-[#1B4332] active:scale-95 text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer border border-[#2D6A4F]/30"
               aria-label="Shopping Cart"
+              title={lang === 'bn' ? 'শপিং কার্ট দেখুন' : 'View Shopping Cart'}
             >
               <ShoppingBag className="w-5 h-5 text-[#E8C547]" />
               {cartCount > 0 && (
@@ -428,7 +405,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 text-gray-700 hover:text-[#133E2B] rounded-lg"
+              className="lg:hidden shrink-0 p-2 text-gray-700 hover:text-[#133E2B] rounded-lg transition-colors"
               aria-label="Menu"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -589,6 +566,54 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             );
           })}
+
+          {/* Mobile Quick Cart Button */}
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onOpenCart();
+            }}
+            className="w-full mt-3 py-2.5 px-3 bg-[#133E2B] text-white hover:bg-[#1B4332] active:scale-98 font-bold text-xs rounded-xl flex items-center justify-between transition-all shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4 text-[#E8C547]" />
+              <span>{lang === 'bn' ? 'শপিং ব্যাগ / কার্ট দেখুন' : 'View Shopping Cart'}</span>
+            </div>
+            <span className="bg-[#D4AF37] text-[#133E2B] font-extrabold text-[11px] px-2.5 py-0.5 rounded-full">
+              {cartCount > 0 ? (lang === 'bn' ? `${toBnNumber(cartCount)}টি পণ্য` : `${cartCount} items`) : (lang === 'bn' ? 'কার্ট খালি' : 'Empty')}
+            </span>
+          </button>
+
+          {/* Mobile Language Switcher */}
+          {settings.features?.showLanguageSwitcher !== false && (
+            <div className="pt-3 border-t border-[#E8E2D8] mt-3">
+              <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                {lang === 'bn' ? 'ভাষা নির্বাচন করুন (Language):' : 'Select Language:'}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  onClick={() => onLanguageChange('bn')}
+                  className={`py-2 px-3 rounded-xl border text-center font-bold transition-all ${
+                    lang === 'bn'
+                      ? 'bg-[#133E2B] text-white border-[#133E2B] shadow-xs'
+                      : 'bg-white text-gray-700 border-[#DDD5C7]'
+                  }`}
+                >
+                  বাংলা (Bengali)
+                </button>
+                <button
+                  onClick={() => onLanguageChange('en')}
+                  className={`py-2 px-3 rounded-xl border text-center font-bold transition-all ${
+                    lang === 'en'
+                      ? 'bg-[#133E2B] text-white border-[#133E2B] shadow-xs'
+                      : 'bg-white text-gray-700 border-[#DDD5C7]'
+                  }`}
+                >
+                  English (ইংরেজি)
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Mobile Bengali Font Selector */}
           <div className="pt-3 border-t border-[#E8E2D8] mt-3">

@@ -495,4 +495,37 @@ export function matchProductSearch(p: any, query: string): boolean {
   return terms.every((term) => searchableText.includes(term));
 }
 
+/**
+ * Generates an absolute shareable landing page URL for any product.
+ * Compatible with all hosting environments, SPA routing, and query fallbacks.
+ */
+export function getProductShareUrl(productId: string): string {
+  if (typeof window === 'undefined') {
+    return `/product/${productId}`;
+  }
+  const origin = window.location.origin;
+  return `${origin}/product/${productId}`;
+}
+
+/**
+ * Creates ready-to-use social share links for a product
+ */
+export function createSocialShareUrls(product: { id: string; nameBn: string; nameEn?: string; price: number }, lang: Language = 'bn') {
+  const shareUrl = getProductShareUrl(product.id);
+  const title = lang === 'bn' ? product.nameBn : (product.nameEn || product.nameBn);
+  const priceText = formatPrice(product.price, lang);
+  
+  const textMsg = lang === 'bn'
+    ? `আমার ঘর Online - ${title} (মূল্য: ${priceText})\nখাঁটি ও প্রাকৃতিক পণ্য সরাসরি ঘরে বসে অর্ডার করুন:\n${shareUrl}`
+    : `Amar Ghor Online - ${title} (${priceText})\nOrder pure & authentic products now:\n${shareUrl}`;
+
+  return {
+    shareUrl,
+    whatsappUrl: `https://api.whatsapp.com/send?text=${encodeURIComponent(textMsg)}`,
+    facebookUrl: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
+    twitterUrl: `https://twitter.com/intent/tweet?text=${encodeURIComponent(textMsg)}`,
+    textMsg
+  };
+}
+
 

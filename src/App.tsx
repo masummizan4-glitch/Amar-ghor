@@ -10,6 +10,7 @@ import { Hero } from './components/Hero';
 import { CategoryBar } from './components/CategoryBar';
 import { ProductCard } from './components/ProductCard';
 import { ProductDetailsModal } from './components/ProductDetailsModal';
+import { ProductLandingPage } from './components/ProductLandingPage';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { HomeDecorSection } from './components/HomeDecorSection';
@@ -20,8 +21,8 @@ import { ScreenshotReviewsSlider } from './components/ScreenshotReviewsSlider';
 import { Footer } from './components/Footer';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { AdminDashboard } from './components/AdminDashboard';
-import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X, Star } from 'lucide-react';
-import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight } from './utils/formatters';
+import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X, Star, ShoppingBag } from 'lucide-react';
+import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight, formatPrice, toBnNumber, calculateItemPrice } from './utils/formatters';
 import { INITIAL_PRODUCTS } from './data/defaultProducts';
 import { INITIAL_REVIEWS, INITIAL_SCREENSHOT_REVIEWS } from './data/defaultReviews';
 import { 
@@ -163,6 +164,8 @@ export default function App() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [landingProduct, setLandingProduct] = useState<Product | null>(null);
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
   // Reviews & Screenshot Reviews State
   const [reviews, setReviews] = useState<CustomerReview[]>(INITIAL_REVIEWS);
@@ -363,6 +366,28 @@ export default function App() {
         path === '/secret-admin-access-992'
       ) {
         setAdminOpen(true);
+        return;
+      }
+
+      // 3. Dynamic Product Landing Page route: /product/:id or /p/:id or ?product=:id or #product-:id
+      let urlProductId = '';
+      const prodPathMatch = window.location.pathname.match(/^\/(?:product|p)\/([^/?#]+)/i);
+      if (prodPathMatch && prodPathMatch[1]) {
+        urlProductId = decodeURIComponent(prodPathMatch[1]);
+      } else {
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('product')) {
+          urlProductId = searchParams.get('product') || '';
+        } else if (hash.startsWith('#product-')) {
+          urlProductId = hash.replace('#product-', '');
+        }
+      }
+
+      if (urlProductId) {
+        setPendingProductId(urlProductId);
+      } else {
+        setPendingProductId(null);
+        setLandingProduct(null);
       }
     };
 
@@ -474,6 +499,13 @@ export default function App() {
   }, [products]);
 
   const totalCartItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  const cartSubtotal = useMemo(() => {
+    return cart.reduce((acc, item) => {
+      const itemPrice = calculateItemPrice(item.product.price, item.selectedWeight, item.product.unitBn);
+      return acc + (itemPrice * item.quantity);
+    }, 0);
+  }, [cart]);
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col selection:bg-[#2D6A4F] selection:text-white">
@@ -977,7 +1009,46 @@ export default function App() {
 
       {/* 4. Floating WhatsApp & Call Helper */}
       {settings.features?.showFloatingWhatsApp !== false && (
-        <FloatingWhatsApp phone={settings.whatsapp} lang={lang} />
+        <FloatingWhatsApp
+          phone={settings.whatsapp}
+          lang={lang}
+          hasBottomBar={totalCartItems > 0 && !cartOpen && !checkoutOpen}
+        />
+      )}
+
+      {/* 4b. Sticky Mobile Floating Cart Bar (Ensures Cart is always 1-tap accessible on phones) */}
+      {totalCartItems > 0 && !cartOpen && !checkoutOpen && (
+        <div className="sm:hidden fixed bottom-3 left-3 right-3 z-30 animate-in slide-in-from-bottom-3 duration-200">
+          <button
+            onClick={() => setCartOpen(true)}
+            className="w-full bg-[#133E2B] text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between border border-[#E8C547]/40 active:scale-[0.98] transition-transform"
+            aria-label="Open Cart"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-[#2D6A4F] flex items-center justify-center text-[#E8C547] shadow-inner">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <span className="absolute -top-1.5 -right-1.5 bg-[#E8C547] text-[#133E2B] text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#133E2B] shadow-xs">
+                  {lang === 'bn' ? toBnNumber(totalCartItems) : totalCartItems}
+                </span>
+              </div>
+              <div className="text-left">
+                <p className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider">
+                  {lang === 'bn' ? 'আপনার কার্ট' : 'Your Cart'}
+                </p>
+                <p className="text-sm font-black text-white">
+                  {formatPrice(cartSubtotal, lang)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-[#E8C547] text-[#133E2B] font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs">
+              <span>{lang === 'bn' ? 'অর্ডার করুন' : 'Checkout'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </div>
+          </button>
+        </div>
       )}
 
       {/* 5. Product Details Modal */}

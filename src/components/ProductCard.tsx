@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Eye, Zap, MessageCircle, Plus, Minus, PackageCheck } from 'lucide-react';
+import { ShoppingCart, Eye, Zap, MessageCircle, Plus, Minus, PackageCheck, Share2, Check } from 'lucide-react';
 import { Product, Language } from '../types';
 import {
   formatPrice,
@@ -12,7 +12,8 @@ import {
   extractProductPackWeight,
   getProductWeightOptions,
   getDefaultProductWeight,
-  resolveImageUrl
+  resolveImageUrl,
+  getProductShareUrl
 } from '../utils/formatters';
 import { playWhatsAppPingSound } from '../utils/sound';
 
@@ -25,6 +26,7 @@ interface ProductCardProps {
   whatsappPhone: string;
   showStockBadge?: boolean;
   showWhatsAppBtn?: boolean;
+  onOpenLanding?: (product: Product) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -35,7 +37,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onOrderNow,
   whatsappPhone,
   showStockBadge = true,
-  showWhatsAppBtn = true
+  showWhatsAppBtn = true,
+  onOpenLanding
 }) => {
   const isWeightBased = isWeightBasedProduct(product);
   const detectedPack = extractProductPackWeight(product);
@@ -44,6 +47,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   const [selectedWeight, setSelectedWeight] = useState(defaultCardWeight);
   const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyShareLink = async () => {
+    const url = getProductShareUrl(product.id);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      console.warn('Copy failed', e);
+    }
+  };
 
   const cardUnitPrice = calculateItemPrice(product.price, selectedWeight, product.unitBn);
   const cardPreviousPrice = calculateItemPrice(product.previousPrice, selectedWeight, product.unitBn);
@@ -57,6 +81,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     quantity
   );
 
+  const handleCardClick = () => {
+    if (onOpenLanding) {
+      onOpenLanding(product);
+    } else {
+      onViewDetails(product);
+    }
+  };
+
   const isHalfKgActive = selectedWeight.toLowerCase().includes('500') || 
                          selectedWeight.includes('আধা') || 
                          selectedWeight.includes('হাফ') || 
@@ -66,7 +98,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     <div className="group bg-white rounded-2xl border border-[#E8E2D8] overflow-hidden flex flex-col justify-between card-hover-shadow relative transition-all duration-300">
       
       {/* Top Media & Discount Badge */}
-      <div className="relative aspect-square w-full bg-[#F4EFE6] overflow-hidden cursor-pointer" onClick={() => onViewDetails(product)}>
+      <div className="relative aspect-square w-full bg-[#F4EFE6] overflow-hidden cursor-pointer" onClick={handleCardClick}>
         <img
           src={primaryImage}
           alt={product.nameBn}
@@ -76,6 +108,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&q=80';
           }}
         />
+
+        {/* Quick Share / Copy Landing Link Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCopyShareLink();
+          }}
+          className={`absolute top-2.5 right-2.5 p-2 rounded-xl backdrop-blur-md shadow-xs transition-all cursor-pointer z-10 ${
+            copied
+              ? 'bg-emerald-600 text-white scale-105'
+              : 'bg-white/90 text-gray-700 hover:text-[#133E2B] hover:bg-white hover:scale-105'
+          }`}
+          title={copied ? (lang === 'bn' ? 'লিংক কপি হয়েছে!' : 'Link copied!') : (lang === 'bn' ? 'ল্যান্ডিং পেইজ লিংক কপি করুন' : 'Copy Landing Link')}
+          aria-label="Share product"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-white" /> : <Share2 className="w-3.5 h-3.5" />}
+        </button>
 
         {/* Discount Badge */}
         {discountPercent > 0 && (
@@ -105,7 +154,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onViewDetails(product);
+            handleCardClick();
           }}
           className="absolute bottom-2.5 right-2.5 p-2 bg-white/90 backdrop-blur-sm text-[#133E2B] rounded-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white cursor-pointer"
           title={lang === 'bn' ? 'বিস্তারিত দেখুন' : 'View Details'}
@@ -130,7 +179,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           {/* Product Names */}
           <h3
-            onClick={() => onViewDetails(product)}
+            onClick={handleCardClick}
             className="font-bold text-base sm:text-lg text-[#133E2B] hover:text-[#2D6A4F] cursor-pointer line-clamp-1 transition-colors"
           >
             {product.nameBn}

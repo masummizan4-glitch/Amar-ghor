@@ -89,7 +89,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           </span>
         </div>
         {showTagline && (
-          <span className={`font-medium ${tagSize} ${dark ? 'text-emerald-200' : 'text-[#2D6A4F]'}`}>
+          <span className={`font-medium ${tagSize} ${dark ? 'text-emerald-200' : 'text-[#2D6A4F]'} hidden sm:block truncate`}>
             আপন ঘরের মতো নিরাপদ
           </span>
         )}

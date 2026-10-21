@@ -1568,14 +1568,73 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
+  // Helper to serve SEO-optimized HTML for product landing pages (OpenGraph social share preview)
+  const serveProductLandingHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
+    const prodId = req.params.id;
+    try {
+      let product: any = null;
+      try {
+        const data = await fs.readFile(DB_FILE, 'utf-8');
+        const parsed = JSON.parse(data);
+        product = (parsed.products || []).find((p: any) => p.id === prodId);
+      } catch (e) {}
+
+      if (!product) {
+        product = DEFAULT_PRODUCTS.find((p) => p.id === prodId);
+      }
+
+      const indexPath = isProd ? path.join(__dirname, 'dist', 'index.html') : path.join(__dirname, 'index.html');
+      let html = await fs.readFile(indexPath, 'utf-8');
+
+      if (product) {
+        const title = `${product.nameBn} - ৳${product.price} | আমার ঘর Online`;
+        const desc = `${product.nameBn} - ${(product.descriptionBn || '').slice(0, 150)}... খাঁটি ও প্রাকৃতিক পণ্য ক্যাশ অন ডেলিভারিতে অর্ডার করুন।`;
+        const imgUrl = product.images?.[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+        const canonicalUrl = `https://${req.get('host')}/product/${product.id}`;
+
+        html = html
+          .replace(/<title>.*?<\/title>/i, `<title>${title}</title>`)
+          .replace(/<meta name="description" content=".*?" \/>/i, `<meta name="description" content="${desc}" />`)
+          .replace(/<meta property="og:title" content=".*?" \/>/i, `<meta property="og:title" content="${title}" />`)
+          .replace(/<meta property="og:description" content=".*?" \/>/i, `<meta property="og:description" content="${desc}" />`);
+
+        const extraTags = `
+    <meta property="og:image" content="${imgUrl}" />
+    <meta property="og:url" content="${canonicalUrl}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${desc}" />
+    <meta name="twitter:image" content="${imgUrl}" />`;
+        html = html.replace('</head>', `${extraTags}\n  </head>`);
+      }
+
+      if (viteInstance) {
+        html = await viteInstance.transformIndexHtml(req.originalUrl, html);
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      if (isProd) {
+        return res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      } else {
+        return res.sendFile(path.join(__dirname, 'index.html'));
+      }
+    }
+  };
+
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
     });
+    // Support product landing URLs with dynamic SEO previews in dev
+    app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res, vite));
     app.use(vite.middlewares);
   } else {
+    // Support product landing URLs with dynamic SEO previews in prod
+    app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res));
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {

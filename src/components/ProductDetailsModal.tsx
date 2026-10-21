@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ShoppingCart, Zap, MessageCircle, ShieldCheck, Truck, Plus, Minus, Check, ZoomIn, Scale } from 'lucide-react';
+import { X, ShoppingCart, Zap, MessageCircle, ShieldCheck, Truck, Plus, Minus, Check, ZoomIn, Scale, ExternalLink, Share2, Copy } from 'lucide-react';
 import { Product, Language } from '../types';
 import {
   formatPrice,
@@ -12,7 +12,8 @@ import {
   extractProductPackWeight,
   getProductWeightOptions,
   getDefaultProductWeight,
-  resolveImageUrl
+  resolveImageUrl,
+  getProductShareUrl
 } from '../utils/formatters';
 import { playWhatsAppPingSound } from '../utils/sound';
 
@@ -26,6 +27,7 @@ interface ProductDetailsModalProps {
   onSelectProduct: (p: Product) => void;
   whatsappPhone: string;
   showWhatsAppBtn?: boolean;
+  onOpenLanding?: (product: Product) => void;
 }
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
@@ -37,7 +39,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   allProducts,
   onSelectProduct,
   whatsappPhone,
-  showWhatsAppBtn = true
+  showWhatsAppBtn = true,
+  onOpenLanding
 }) => {
   const isWeightBased = isWeightBasedProduct(product);
   const detectedPack = extractProductPackWeight(product);
@@ -469,6 +472,47 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                     <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে সরাসরি অর্ডার করুন' : 'Order Directly on WhatsApp'}</span>
                   </a>
                 )}
+
+                {/* Open Full Landing Page & Share Link */}
+                <div className="pt-1 flex items-center gap-2">
+                  {onOpenLanding && (
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenLanding(product);
+                      }}
+                      className="flex-1 py-2 px-3 bg-[#FAF8F5] hover:bg-[#EAF2EC] text-[#133E2B] font-bold text-xs rounded-xl border border-[#DDD5C7] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                      <span>{lang === 'bn' ? 'সম্পূর্ণ ল্যান্ডিং পেইজ দেখুন' : 'View Full Landing Page'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={async () => {
+                      const url = getProductShareUrl(product.id);
+                      try {
+                        if (navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(url);
+                        } else {
+                          const ta = document.createElement('textarea');
+                          ta.value = url;
+                          document.body.appendChild(ta);
+                          ta.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(ta);
+                        }
+                        setAddedToast(true);
+                        setTimeout(() => setAddedToast(false), 2000);
+                      } catch (e) {}
+                    }}
+                    className="py-2 px-3 bg-white hover:bg-gray-50 border border-[#DDD5C7] text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title={lang === 'bn' ? 'শেয়ার লিংক কপি করুন' : 'Copy share link'}
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                    <span>{lang === 'bn' ? 'লিংক' : 'Link'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Description */}

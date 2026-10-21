@@ -6,10 +6,10 @@ import {
   Sliders, Sparkles, Layout, Globe, Type, MessageCircle, Phone, Search, FileText, 
   CreditCard, Bell, ChevronRight, ToggleLeft, ToggleRight, ShieldCheck,
   ShieldAlert, UserX, UserCheck, Users, Ban, Download, Filter, HelpCircle, Shield,
-  History, Star, PhoneCall
+  History, Star, PhoneCall, Link2, ExternalLink, Share2
 } from 'lucide-react';
 import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile, CustomerReview, ScreenshotReview } from '../types';
-import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel } from '../utils/formatters';
+import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel, getProductShareUrl } from '../utils/formatters';
 import { CATEGORIES } from './CategoryBar';
 import { BrandLogo } from './BrandLogo';
 import { BD_DISTRICTS } from './CheckoutModal';
@@ -81,6 +81,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [savingScreenshot, setSavingScreenshot] = useState(false);
   const [uploadingSsImage, setUploadingSsImage] = useState(false);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [adminCopiedProductId, setAdminCopiedProductId] = useState<string | null>(null);
 
   useEffect(() => {
     if (reviews && reviews.length > 0) {
@@ -1459,19 +1460,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </td>
                             <td className="p-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                {/* Copy Landing Page URL */}
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const shareUrl = getProductShareUrl(p.id);
+                                    try {
+                                      if (navigator.clipboard?.writeText) {
+                                        await navigator.clipboard.writeText(shareUrl);
+                                      } else {
+                                        const ta = document.createElement('textarea');
+                                        ta.value = shareUrl;
+                                        document.body.appendChild(ta);
+                                        ta.select();
+                                        document.execCommand('copy');
+                                        document.body.removeChild(ta);
+                                      }
+                                      setAdminCopiedProductId(p.id);
+                                      setTimeout(() => setAdminCopiedProductId(null), 2500);
+                                    } catch (e) {}
+                                  }}
+                                  className={`p-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-all cursor-pointer ${
+                                    adminCopiedProductId === p.id
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'text-emerald-700 hover:bg-emerald-50 bg-[#EAF7EE]'
+                                  }`}
+                                  title="ল্যান্ডিং পেইজ লিংক কপি করুন (ফেসবুক বা হোয়াটসঅ্যাপে শেয়ার করার জন্য)"
+                                >
+                                  {adminCopiedProductId === p.id ? <Check className="w-4 h-4 text-emerald-700" /> : <Link2 className="w-4 h-4" />}
+                                  <span className="hidden xl:inline text-[11px]">
+                                    {adminCopiedProductId === p.id ? 'কপি হয়েছে' : 'ল্যান্ডিং লিংক'}
+                                  </span>
+                                </button>
+
+                                {/* Preview Landing Page */}
+                                <a
+                                  href={`/product/${p.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+                                  title="ল্যান্ডিং পেইজ প্রিভিউ দেখুন"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+
                                 <button
                                   onClick={() => {
                                     setIsNewProduct(false);
                                     setEditingProduct({ ...p });
                                   }}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer"
                                   title="সম্পাদনা করুন"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteProduct(p.id)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
                                   title="মুছে ফেলুন"
                                 >
                                   <Trash2 className="w-4 h-4" />
