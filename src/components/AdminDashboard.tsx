@@ -1066,6 +1066,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         console.warn('Backend settings save unreachable, saving to cloud:', e);
       }
 
+      // Save live domain to localStorage for client-side sharing helpers
+      if (settingsForm.liveSiteUrl && settingsForm.liveSiteUrl.trim()) {
+        localStorage.setItem('amarghor_live_domain', settingsForm.liveSiteUrl.trim());
+      }
+
       // Always persist to Cloud Firestore for permanent multi-platform availability
       await saveSettingsToCloud(settingsForm).catch((e) => console.warn('Cloud settings sync warning:', e));
 
@@ -3461,6 +3466,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <Save className="w-4 h-4 text-[#E8C547]" />
                         <span>{savingSettings ? 'সংরক্ষণ হচ্ছে...' : 'সেটিংস সংরক্ষণ করুন'}</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* LIVE DOMAIN / SOCIAL SHARING URL SETTING */}
+                  <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/80 to-blue-50/90 p-5 rounded-2xl border border-blue-200 space-y-3.5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-200/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Globe className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-blue-950 flex items-center gap-2">
+                            <span>লাইভ ওয়েবসাইট লিঙ্ক / ডোমেইন (Facebook ও WhatsApp শেয়ার প্রিভিউ)</span>
+                            <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                              প্রিভিউ ফিক্স
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-blue-900">
+                            সোশ্যাল মিডিয়ায় প্রোডাক্ট লিঙ্ক শেয়ার করলে ফেসবুক ও হোয়াটসঅ্যাপে পণ্যের নাম, আসল ছবি ও মূল্য দেখানোর জন্য
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = window.location.origin;
+                            setSettingsForm({ ...settingsForm, liveSiteUrl: cur });
+                          }}
+                          className="px-2.5 py-1.5 bg-white hover:bg-blue-100/70 text-blue-800 text-[11px] font-semibold rounded-lg border border-blue-300 transition-colors shadow-xs"
+                        >
+                          বর্তমান প্রিভিউ লিঙ্ক ব্যবহার করুন
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-gray-800">
+                        আপনার লাইভ ওয়েবসাইট ডোমেইন / URL:
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="url"
+                          value={settingsForm.liveSiteUrl || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, liveSiteUrl: e.target.value })}
+                          placeholder="https://amar-ghor.netlify.app অথবা https://amarghoronline.com"
+                          className="flex-1 px-3.5 py-2 text-xs border border-blue-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                        {settingsForm.liveSiteUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({ ...settingsForm, liveSiteUrl: '' })}
+                            className="px-3 py-1.5 text-xs text-gray-500 hover:text-red-600 bg-white border border-gray-200 rounded-xl transition-colors"
+                          >
+                            রিসেট
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-700 bg-white/80 p-3 rounded-xl border border-blue-100 leading-relaxed space-y-1">
+                        <p className="font-semibold text-blue-950 flex items-center gap-1.5">
+                          <span>💡 ফেসবুক ও হোয়াটসঅ্যাপে কেন গুগলের লোগো শো করে?</span>
+                        </p>
+                        <p className="text-gray-600">
+                          Google AI Studio-এর ডেভেলপমেন্ট লিঙ্ক (<code className="bg-gray-100 px-1 py-0.5 rounded text-[10px] text-gray-800">ais-pre-*.run.app</code>) একটি টেস্ট পরিবেশ। গুগলের ক্লাউড সুরক্ষার কারণে সরাসরি কোনো ফেসবুক বা হোয়াটসঅ্যাপ ক্রলার বট এতে ঢুকতে পারে না এবং গুগলের কুকি সিকিউরিটি পেজ (যাতে গুগল এআই স্টুডিও লোগো থাকে) পায়।
+                        </p>
+                        <p className="text-gray-600">
+                          যখন সাইটটি আপনার নিজস্ব ডোমেইন বা Netlify/Vercel-এ হোস্ট করবেন এবং সেই লাইভ লিঙ্কটি উপরে সেভ করবেন, তখন সোশ্যাল মিডিয়ায় শেয়ারকৃত প্রতিটি প্রোডাক্ট লিঙ্কে স্বয়ংক্রিয়ভাবে প্রোডাক্টের নাম, মেটাট্যাগ এবং আসল ছবি ভেসে উঠবে!
+                        </p>
+                      </div>
                     </div>
                   </div>
 

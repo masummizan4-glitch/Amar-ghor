@@ -49,6 +49,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(product?.images?.[0] || '');
   const [addedToast, setAddedToast] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Hover-to-zoom state
   const [isZoomed, setIsZoomed] = useState(false);
@@ -502,15 +503,28 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                           document.execCommand('copy');
                           document.body.removeChild(ta);
                         }
-                        setAddedToast(true);
-                        setTimeout(() => setAddedToast(false), 2000);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2500);
                       } catch (e) {}
                     }}
-                    className="py-2 px-3 bg-white hover:bg-gray-50 border border-[#DDD5C7] text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className={`py-2 px-3 border rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold ${
+                      copiedLink
+                        ? 'bg-emerald-50 border-emerald-400 text-emerald-800'
+                        : 'bg-white hover:bg-gray-50 border-[#DDD5C7] text-gray-700'
+                    }`}
                     title={lang === 'bn' ? 'শেয়ার লিংক কপি করুন' : 'Copy share link'}
                   >
-                    <Share2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
-                    <span>{lang === 'bn' ? 'লিংক' : 'Link'}</span>
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{lang === 'bn' ? 'কপি হয়েছে!' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                        <span>{lang === 'bn' ? 'লিংক' : 'Link'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -214,4 +214,5 @@ export interface SiteSettings {
   minAddressLength?: number;
   maxOrdersPerPhoneDay?: number;
   screenshotReviews?: ScreenshotReview[];
+  liveSiteUrl?: string;
 }

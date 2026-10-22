@@ -133,7 +133,7 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
     const ogDesc = document.querySelector('meta[property="og:description"]');
     if (ogDesc) ogDesc.setAttribute('content', cleanDesc);
 
-    const shareUrl = getProductShareUrl(product.id);
+    const shareUrl = getProductShareUrl(product.id, settings.liveSiteUrl);
     let ogUrl = document.querySelector('meta[property="og:url"]');
     if (!ogUrl) {
       ogUrl = document.createElement('meta');
@@ -224,7 +224,7 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
   const savingsAmount = currentPreviousPrice > currentUnitPrice ? (currentPreviousPrice - currentUnitPrice) * quantity : 0;
 
   const gallery = product.images && product.images.length > 0 ? product.images : [selectedImage];
-  const shareLinks = createSocialShareUrls(product, lang);
+  const shareLinks = createSocialShareUrls(product, lang, settings.liveSiteUrl);
 
   // Zoom handlers
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -270,7 +270,7 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
   };
 
   const handleCopyLink = async () => {
-    const url = getProductShareUrl(product.id);
+    const url = getProductShareUrl(product.id, settings.liveSiteUrl);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);
@@ -784,7 +784,7 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
                 {/* Share Link Row with Copy Button */}
                 <div className="flex items-center gap-2">
                   <div className="flex-1 bg-white border border-[#DDD5C7] px-3 py-2 rounded-xl text-xs font-mono text-gray-600 truncate select-all">
-                    {getProductShareUrl(product.id)}
+                    {getProductShareUrl(product.id, settings.liveSiteUrl)}
                   </div>
 
                   <button

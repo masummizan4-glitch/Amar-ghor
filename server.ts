@@ -3,13 +3,18 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore } from './src/lib/firestoreSync';
+import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore } from './src/lib/firestoreSync.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+// Instant health check endpoint for Cloud Run and load balancers
+app.get(['/healthz', '/_health', '/api/health'], (_req, res) => {
+  res.status(200).send('OK');
+});
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
@@ -1566,7 +1571,8 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Start server with Vite middleware in development or static dist in production
 async function startServer() {
-  const isProd = process.env.NODE_ENV === 'production';
+  const hasDist = existsSync(path.join(__dirname, 'dist', 'index.html'));
+  const isProd = process.env.NODE_ENV === 'production' || (!process.env.NODE_ENV && hasDist);
 
   // Helper to serve SEO-optimized HTML for product landing pages (OpenGraph social share preview)
   const serveProductLandingHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
@@ -1589,22 +1595,27 @@ async function startServer() {
       if (product) {
         const title = `${product.nameBn} - ৳${product.price} | আমার ঘর Online`;
         const desc = `${product.nameBn} - ${(product.descriptionBn || '').slice(0, 150)}... খাঁটি ও প্রাকৃতিক পণ্য ক্যাশ অন ডেলিভারিতে অর্ডার করুন।`;
-        const imgUrl = product.images?.[0] || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+        let imgUrl = product.images?.[0] || 'https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005716/ChatGPT_Image_Sep_29_2026_09_43_29_PM.png';
+        if (imgUrl.startsWith('/')) {
+          imgUrl = `https://${req.get('host')}${imgUrl}`;
+        }
         const canonicalUrl = `https://${req.get('host')}/product/${product.id}`;
 
         html = html
           .replace(/<title>.*?<\/title>/i, `<title>${title}</title>`)
           .replace(/<meta name="description" content=".*?" \/>/i, `<meta name="description" content="${desc}" />`)
           .replace(/<meta property="og:title" content=".*?" \/>/i, `<meta property="og:title" content="${title}" />`)
-          .replace(/<meta property="og:description" content=".*?" \/>/i, `<meta property="og:description" content="${desc}" />`);
+          .replace(/<meta property="og:description" content=".*?" \/>/i, `<meta property="og:description" content="${desc}" />`)
+          .replace(/<meta property="og:image" content=".*?" \/>/i, `<meta property="og:image" content="${imgUrl}" />`)
+          .replace(/<meta property="og:image:secure_url" content=".*?" \/>/i, `<meta property="og:image:secure_url" content="${imgUrl}" />`)
+          .replace(/<meta name="twitter:title" content=".*?" \/>/i, `<meta name="twitter:title" content="${title}" />`)
+          .replace(/<meta name="twitter:description" content=".*?" \/>/i, `<meta name="twitter:description" content="${desc}" />`)
+          .replace(/<meta name="twitter:image" content=".*?" \/>/i, `<meta name="twitter:image" content="${imgUrl}" />`);
 
         const extraTags = `
-    <meta property="og:image" content="${imgUrl}" />
     <meta property="og:url" content="${canonicalUrl}" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${title}" />
-    <meta name="twitter:description" content="${desc}" />
-    <meta name="twitter:image" content="${imgUrl}" />`;
+    <meta property="product:price:amount" content="${product.price}" />
+    <meta property="product:price:currency" content="BDT" />`;
         html = html.replace('</head>', `${extraTags}\n  </head>`);
       }
 
@@ -1631,10 +1642,24 @@ async function startServer() {
     });
     // Support product landing URLs with dynamic SEO previews in dev
     app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res, vite));
+    app.get('/', (req, res, next) => {
+      if (req.query.product) {
+        (req.params as any).id = String(req.query.product);
+        return serveProductLandingHtml(req, res, vite);
+      }
+      next();
+    });
     app.use(vite.middlewares);
   } else {
     // Support product landing URLs with dynamic SEO previews in prod
     app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res));
+    app.get('/', (req, res, next) => {
+      if (req.query.product) {
+        (req.params as any).id = String(req.query.product);
+        return serveProductLandingHtml(req, res);
+      }
+      next();
+    });
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
@@ -1642,8 +1667,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Amar Ghor Online server running at http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Amar Ghor Online server running in ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'} mode at http://0.0.0.0:${PORT}`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received: closing HTTP server gracefully');
+    server.close(() => {
+      process.exit(0);
+    });
   });
 }
 

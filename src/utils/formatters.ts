@@ -497,27 +497,48 @@ export function matchProductSearch(p: any, query: string): boolean {
 
 /**
  * Generates an absolute shareable landing page URL for any product.
- * Compatible with all hosting environments, SPA routing, and query fallbacks.
+ * Supports custom live domain (e.g. Netlify / production domain) to bypass AI Studio development cookie redirects.
  */
-export function getProductShareUrl(productId: string): string {
+export function getProductShareUrl(productId: string, customDomain?: string): string {
+  let domain = customDomain;
+  if (!domain && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('amarghor_live_domain');
+      if (stored && stored.trim()) domain = stored.trim();
+    } catch {}
+  }
+
+  if (domain && domain.trim()) {
+    let clean = domain.trim().replace(/\/+$/, '');
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `https://${clean}`;
+    }
+    return `${clean}/product/${productId}`;
+  }
+
   if (typeof window === 'undefined') {
     return `/product/${productId}`;
   }
-  const origin = window.location.origin;
-  return `${origin}/product/${productId}`;
+  return `${window.location.origin}/product/${productId}`;
 }
 
 /**
- * Creates ready-to-use social share links for a product
+ * Creates ready-to-use social share links for a product with rich text previews
  */
-export function createSocialShareUrls(product: { id: string; nameBn: string; nameEn?: string; price: number }, lang: Language = 'bn') {
-  const shareUrl = getProductShareUrl(product.id);
+export function createSocialShareUrls(
+  product: { id: string; nameBn: string; nameEn?: string; price: number; unitBn?: string; descriptionBn?: string },
+  lang: Language = 'bn',
+  customDomain?: string
+) {
+  const shareUrl = getProductShareUrl(product.id, customDomain);
   const title = lang === 'bn' ? product.nameBn : (product.nameEn || product.nameBn);
   const priceText = formatPrice(product.price, lang);
-  
+  const unit = product.unitBn ? ` (${product.unitBn})` : '';
+  const desc = product.descriptionBn ? `\n🌿 ${product.descriptionBn.slice(0, 95)}...` : '';
+
   const textMsg = lang === 'bn'
-    ? `আমার ঘর Online - ${title} (মূল্য: ${priceText})\nখাঁটি ও প্রাকৃতিক পণ্য সরাসরি ঘরে বসে অর্ডার করুন:\n${shareUrl}`
-    : `Amar Ghor Online - ${title} (${priceText})\nOrder pure & authentic products now:\n${shareUrl}`;
+    ? `✨ *আমার ঘর Online* - ${title}\n💰 *মূল্য: ${priceText}*${unit}${desc}\n\n🚚 সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (পণ্য দেখে মূল্য পরিশোধ)\n👉 সরাসরি পণ্যটি দেখতে বা অর্ডার করতে নিচের লিংকে ক্লিক করুন:\n${shareUrl}`
+    : `✨ *Amar Ghor Online* - ${title}\n💰 *Price: ${priceText}*${unit}\n\n🚚 Cash on Delivery All Over Bangladesh\n👉 Click link below to view or order now:\n${shareUrl}`;
 
   return {
     shareUrl,
