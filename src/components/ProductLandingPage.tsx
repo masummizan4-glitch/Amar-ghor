@@ -53,7 +53,7 @@ interface ProductLandingPageProps {
   onOpenCart: () => void;
   cartCount: number;
   reviews?: CustomerReview[];
-  onAddReview?: (review: { customerName: string; rating: number; comment: string; district?: string }) => Promise<boolean>;
+  onAddReview?: (review: Omit<CustomerReview, 'id' | 'createdAt'>) => Promise<boolean>;
   onSelectProduct: (p: Product) => void;
 }
 
@@ -312,10 +312,12 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
     if (onAddReview) {
       setSubmittingReview(true);
       const success = await onAddReview({
-        customerName: reviewerName.trim(),
+        name: reviewerName.trim(),
         rating: reviewerRating,
         comment: reviewerComment.trim(),
-        district: reviewerDistrict
+        district: reviewerDistrict,
+        productName: lang === 'bn' ? product.nameBn : (product.nameEn || product.nameBn),
+        verifiedPurchase: true
       });
       setSubmittingReview(false);
       if (success) {
@@ -1137,7 +1139,7 @@ export const ProductLandingPage: React.FC<ProductLandingPageProps> = ({
                 <div key={rev.id || idx} className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h5 className="font-bold text-xs sm:text-sm text-gray-900">{rev.customerName}</h5>
+                      <h5 className="font-bold text-xs sm:text-sm text-gray-900">{rev.name || rev.customerName}</h5>
                       <span className="text-[11px] text-gray-500">{rev.district || 'ঢাকা'}</span>
                     </div>
                     <div className="flex text-amber-500">

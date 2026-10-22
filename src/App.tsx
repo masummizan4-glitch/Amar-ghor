@@ -411,6 +411,29 @@ export default function App() {
     };
   }, []);
 
+  // Resolve product landing page from pending product ID once products are loaded
+  useEffect(() => {
+    if (pendingProductId && products.length > 0) {
+      const found = products.find((p) => p.id === pendingProductId);
+      if (found) {
+        setLandingProduct(found);
+      }
+    }
+  }, [pendingProductId, products]);
+
+  const handleOpenProductLanding = (product: Product) => {
+    setLandingProduct(product);
+    setSelectedProduct(null);
+    window.history.pushState(null, '', `/product/${product.id}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackFromLanding = () => {
+    setLandingProduct(null);
+    window.history.pushState(null, '', '/');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Cart Actions
   const handleAddToCart = (product: Product, quantity = 1, selectedWeight = '') => {
     const defaultWeight = getDefaultProductWeight(product);
@@ -509,29 +532,46 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col selection:bg-[#2D6A4F] selection:text-white">
-      {/* 1. Header Navigation */}
-      <Header
-        lang={lang}
-        onLanguageChange={setLang}
-        cartCount={totalCartItems}
-        onOpenCart={() => setCartOpen(true)}
-        onOpenAdmin={() => setAdminOpen(true)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          setActiveTab(tab);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        settings={settings}
-        currentFont={currentFont}
-        onFontChange={handleFontChange}
-        products={products}
-        onSelectProduct={setSelectedProduct}
-      />
+      {landingProduct ? (
+        <ProductLandingPage
+          product={landingProduct}
+          allProducts={products}
+          lang={lang}
+          settings={settings}
+          onAddToCart={handleAddToCart}
+          onOrderNow={handleOrderNow}
+          onBackToHome={handleBackFromLanding}
+          onOpenCart={() => setCartOpen(true)}
+          cartCount={totalCartItems}
+          reviews={reviews}
+          onAddReview={handleAddReview}
+          onSelectProduct={handleOpenProductLanding}
+        />
+      ) : (
+        <>
+          {/* 1. Header Navigation */}
+          <Header
+            lang={lang}
+            onLanguageChange={setLang}
+            cartCount={totalCartItems}
+            onOpenCart={() => setCartOpen(true)}
+            onOpenAdmin={() => setAdminOpen(true)}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            activeTab={activeTab}
+            onTabChange={(tab) => {
+              setActiveTab(tab);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            settings={settings}
+            currentFont={currentFont}
+            onFontChange={handleFontChange}
+            products={products}
+            onSelectProduct={handleOpenProductLanding}
+          />
 
-      {/* 2. Main Body Content Based on Active Tab */}
-      <main className="flex-1">
+          {/* 2. Main Body Content Based on Active Tab */}
+          <main className="flex-1">
         {/* TAB: HOME */}
         {activeTab === 'home' && (
           <>
@@ -698,7 +738,8 @@ export default function App() {
                         key={product.id}
                         product={product}
                         lang={lang}
-                        onViewDetails={setSelectedProduct}
+                        onViewDetails={handleOpenProductLanding}
+                        onOpenLanding={handleOpenProductLanding}
                         onAddToCart={handleAddToCart}
                         onOrderNow={handleOrderNow}
                         whatsappPhone={settings.whatsapp}
@@ -716,7 +757,7 @@ export default function App() {
               <HomeDecorSection
                 products={products}
                 lang={lang}
-                onViewDetails={setSelectedProduct}
+                onViewDetails={handleOpenProductLanding}
                 onAddToCart={handleAddToCart}
                 onOrderNow={handleOrderNow}
                 whatsappPhone={settings.whatsapp}
@@ -873,7 +914,8 @@ export default function App() {
                     key={product.id}
                     product={product}
                     lang={lang}
-                    onViewDetails={setSelectedProduct}
+                    onViewDetails={handleOpenProductLanding}
+                    onOpenLanding={handleOpenProductLanding}
                     onAddToCart={handleAddToCart}
                     onOrderNow={handleOrderNow}
                     whatsappPhone={settings.whatsapp}
@@ -931,7 +973,8 @@ export default function App() {
                       key={product.id}
                       product={product}
                       lang={lang}
-                      onViewDetails={setSelectedProduct}
+                      onViewDetails={handleOpenProductLanding}
+                      onOpenLanding={handleOpenProductLanding}
                       onAddToCart={handleAddToCart}
                       onOrderNow={handleOrderNow}
                       whatsappPhone={settings.whatsapp}
@@ -995,6 +1038,8 @@ export default function App() {
           </div>
         )}
       </main>
+        </>
+      )}
 
       {/* 3. Footer */}
       <Footer
@@ -1061,7 +1106,8 @@ export default function App() {
           onAddToCart={handleAddToCart}
           onOrderNow={handleOrderNow}
           allProducts={products}
-          onSelectProduct={setSelectedProduct}
+          onSelectProduct={handleOpenProductLanding}
+          onOpenLanding={handleOpenProductLanding}
           whatsappPhone={settings.whatsapp}
           showWhatsAppBtn={settings.features?.showProductWhatsAppBtn !== false}
         />

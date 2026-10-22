@@ -78,3 +78,38 @@ export function playWhatsAppPingSound(): void {
     console.debug('Tactile audio playback skipped:', err);
   }
 }
+
+/**
+ * Plays a soft, rewarding tactile sound when an item is added to the cart.
+ */
+export function playAddToCartSound(): void {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate(20);
+    } catch {}
+  }
+
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.001, now);
+    masterGain.gain.exponentialRampToValueAtTime(0.15, now + 0.01);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    masterGain.connect(ctx.destination);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, now);
+    osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.08);
+    osc.connect(masterGain);
+
+    osc.start(now);
+    osc.stop(now + 0.2);
+  } catch (err) {
+    console.debug('Add to cart audio skipped:', err);
+  }
+}
+
