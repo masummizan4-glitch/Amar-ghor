@@ -191,7 +191,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Quick Weight Selector for weight-based products */}
           {isWeightBased && weightOptions.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-              {weightOptions.slice(0, 3).map((opt) => {
+              {weightOptions.map((opt) => {
                 const isSelected = selectedWeight === opt;
                 return (
                   <button
