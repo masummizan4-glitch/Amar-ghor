@@ -2,6 +2,32 @@
 <html lang="bn">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Fast Refresh preamble initialization: ensures $RefreshReg$ and $RefreshSig$ are always defined
+      window.$RefreshReg$ = window.$RefreshReg$ || function() {};
+      window.$RefreshSig$ = window.$RefreshSig$ || function() { return function(type) { return type; }; };
+      window.__vite_plugin_react_preamble_installed__ = true;
+
+      (function() {
+        function isSuppressedError(err) {
+          if (!err) return false;
+          var str = typeof err === 'string' ? err : (err.message || String(err));
+          return str.indexOf('WebSocket') !== -1 || str.indexOf('vite:ws') !== -1 || str.indexOf("can't detect preamble") !== -1;
+        }
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isSuppressedError(event && event.reason)) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          }
+        }, true);
+        window.addEventListener('error', function(event) {
+          if (isSuppressedError(event && (event.message || event.error))) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <title>আমার ঘর Online | Amar Ghor Online - আপন ঘরের মতো নিরাপদ</title>
     <meta name="description" content="আপন ঘরের মতো নিরাপদ - খাঁটি খাবার ও ঘরের সৌন্দর্য বাড়ানোর বিশ্বস্ত অনলাইন শপ। প্রাকৃতিক মধু, দানাদার গাওয়া ঘি, কোল্ডপ্রেস সরিষার তেল, সিড ও নাট মিক্স এবং হোম ডেকোর।" />
@@ -18,9 +44,15 @@
     <meta name="twitter:title" content="আমার ঘর Online - আপন ঘরের মতো নিরাপদ" />
     <meta name="twitter:description" content="খাঁটি খাবার ও ঘরের সৌন্দর্য বাড়ানোর বিশ্বস্ত অনলাইন শপ।" />
     <meta name="twitter:image" content="https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005716/ChatGPT_Image_Sep_29_2026_09_43_29_PM.png" />
+    <meta name="theme-color" content="#133E2B" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="আমার ঘর" />
     <link id="app-favicon" rel="icon" type="image/png" href="/favicon.png" />
     <link rel="shortcut icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tiro+Bangla:ital@0;1&display=swap" rel="stylesheet">

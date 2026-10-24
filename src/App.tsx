@@ -20,6 +20,7 @@ import { ReviewsSection } from './components/ReviewsSection';
 import { ScreenshotReviewsSlider } from './components/ScreenshotReviewsSlider';
 import { Footer } from './components/Footer';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
+import { PWAFloatingBanner } from './components/PWAInstallButton';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X, Star, ShoppingBag } from 'lucide-react';
 import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight, formatPrice, toBnNumber, calculateItemPrice } from './utils/formatters';
@@ -1060,6 +1061,9 @@ export default function App() {
           hasBottomBar={totalCartItems > 0 && !cartOpen && !checkoutOpen}
         />
       )}
+
+      {/* 4a. PWA Home Screen Install Banner (Unobtrusive) */}
+      <PWAFloatingBanner lang={lang} />
 
       {/* 4b. Sticky Mobile Floating Cart Bar (Ensures Cart is always 1-tap accessible on phones) */}
       {totalCartItems > 0 && !cartOpen && !checkoutOpen && (

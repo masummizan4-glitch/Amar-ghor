@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ShoppingBag, Search, Phone, Menu, X, ShieldCheck, HeartHandshake, Type, ArrowRight, Sparkles } from 'lucide-react';
 import { Language, SiteSettings, Product } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { PWAInstallButton } from './PWAInstallButton';
 import { formatPrice, toBnNumber, matchProductSearch } from '../utils/formatters';
 import { playWhatsAppPingSound } from '../utils/sound';
 
@@ -387,6 +388,9 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
+            {/* PWA Mobile App Download Button in Header */}
+            <PWAInstallButton lang={lang} variant="header" />
+
             {/* Cart Trigger Button - ALWAYS VISIBLE, NEVER PUSHED OFF SCREEN */}
             <button
               onClick={onOpenCart}
@@ -583,6 +587,9 @@ export const Header: React.FC<HeaderProps> = ({
               {cartCount > 0 ? (lang === 'bn' ? `${toBnNumber(cartCount)}টি পণ্য` : `${cartCount} items`) : (lang === 'bn' ? 'কার্ট খালি' : 'Empty')}
             </span>
           </button>
+
+          {/* Mobile Home Screen App Install Button */}
+          <PWAInstallButton lang={lang} variant="mobile_menu" />
 
           {/* Mobile Language Switcher */}
           {settings.features?.showLanguageSwitcher !== false && (

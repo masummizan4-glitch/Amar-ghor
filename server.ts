@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
@@ -1572,7 +1573,7 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 // Start server with Vite middleware in development or static dist in production
 async function startServer() {
   const hasDist = existsSync(path.join(__dirname, 'dist', 'index.html'));
-  const isProd = process.env.NODE_ENV === 'production' || (!process.env.NODE_ENV && hasDist);
+  const isProd = process.env.NODE_ENV === 'production' || (process.env.npm_lifecycle_event === 'start' && hasDist);
 
   // Helper to serve SEO-optimized HTML for product landing pages (OpenGraph social share preview)
   const serveProductLandingHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
@@ -1628,16 +1629,30 @@ async function startServer() {
     } catch (err) {
       if (isProd) {
         return res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      } else if (viteInstance) {
+        try {
+          const raw = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
+          const transformed = await viteInstance.transformIndexHtml(req.originalUrl, raw);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.send(transformed);
+        } catch {
+          return res.sendFile(path.join(__dirname, 'index.html'));
+        }
       } else {
         return res.sendFile(path.join(__dirname, 'index.html'));
       }
     }
   };
 
+  const httpServer = http.createServer(app);
+
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
       appType: 'spa'
     });
     // Support product landing URLs with dynamic SEO previews in dev
@@ -1650,6 +1665,16 @@ async function startServer() {
       next();
     });
     app.use(vite.middlewares);
+    app.get('*', async (req, res, next) => {
+      try {
+        const raw = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(transformed);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     // Support product landing URLs with dynamic SEO previews in prod
     app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res));
@@ -1667,7 +1692,7 @@ async function startServer() {
     });
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Amar Ghor Online server running in ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'} mode at http://0.0.0.0:${PORT}`);
   });
 

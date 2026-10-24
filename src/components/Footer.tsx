@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Phone, MessageCircle, MapPin, Mail, ShieldCheck, X } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { PWAInstallButton } from './PWAInstallButton';
 import { playWhatsAppPingSound } from '../utils/sound';
 
 interface FooterProps {
@@ -117,6 +118,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, settings, onNavigate, onOp
                 <button onClick={() => onNavigate('contact')} className="hover:text-[#E8C547] transition-colors">
                   {lang === 'bn' ? 'যোগাযোগ' : 'Contact'}
                 </button>
+              </li>
+              <li className="pt-1">
+                <PWAInstallButton lang={lang} variant="footer" />
               </li>
             </ul>
           </div>
