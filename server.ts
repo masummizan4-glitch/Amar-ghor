@@ -17,6 +17,13 @@ app.get(['/healthz', '/_health', '/api/health'], (_req, res) => {
   res.status(200).send('OK');
 });
 
+// Explicit Web App Manifest endpoints with correct MIME type
+app.get(['/manifest.webmanifest', '/manifest.json'], (_req, res) => {
+  const manifestPath = path.join(__dirname, 'public', 'manifest.webmanifest');
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.sendFile(manifestPath);
+});
+
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, Share2, PlusSquare, Check, X, ShieldCheck, Sparkles, ArrowRight } from 'lucide-react';
+import { Download, Smartphone, Share2, PlusSquare, Check, X, ShieldCheck, Sparkles, ArrowRight, ExternalLink } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Language } from '../types';
 
@@ -14,7 +14,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
   variant = 'header',
   onInstalled,
 }) => {
-  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, isInIframe, install } = usePWAInstall();
   const [showIOSModal, setShowIOSModal] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
 
@@ -68,7 +68,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
           </span>
         </button>
 
-        {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} onClose={() => setShowIOSModal(false)} />}
+        {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} isInIframe={isInIframe} onClose={() => setShowIOSModal(false)} />}
       </>
     );
   }
@@ -86,7 +86,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
           <span>{lang === 'bn' ? 'মোবাইল হোমস্ক্রিন অ্যাপ ডাউনলোড' : 'Download Mobile Home Screen App'}</span>
         </button>
 
-        {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} onClose={() => setShowIOSModal(false)} />}
+        {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} isInIframe={isInIframe} onClose={() => setShowIOSModal(false)} />}
       </>
     );
   }
@@ -114,14 +114,14 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
         </div>
       )}
 
-      {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} onClose={() => setShowIOSModal(false)} />}
+      {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} isInIframe={isInIframe} onClose={() => setShowIOSModal(false)} />}
     </>
   );
 };
 
 // Subtle, clean floating install banner on mobile (appears non-intrusively after scroll)
 export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }) => {
-  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, isInIframe, install } = usePWAInstall();
   const [dismissed, setDismissed] = useState(false);
   const [showIOSModal, setShowIOSModal] = useState(false);
 
@@ -189,20 +189,26 @@ export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }
         </div>
       </div>
 
-      {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} onClose={() => setShowIOSModal(false)} />}
+      {showIOSModal && <InstallGuideModal lang={lang} isIOS={isIOS} isInIframe={isInIframe} onClose={() => setShowIOSModal(false)} />}
     </>
   );
 };
 
 // Universal visual guide modal for iOS Safari and Android Chrome
-export const InstallGuideModal: React.FC<{ lang: Language; isIOS: boolean; onClose: () => void }> = ({
+export const InstallGuideModal: React.FC<{
+  lang: Language;
+  isIOS: boolean;
+  isInIframe?: boolean;
+  onClose: () => void;
+}> = ({
   lang,
   isIOS,
+  isInIframe,
   onClose,
 }) => {
   return (
     <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#DDD5C7] space-y-4 animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-[#DDD5C7] space-y-3.5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#133E2B] text-white flex items-center justify-center">
@@ -225,15 +231,62 @@ export const InstallGuideModal: React.FC<{ lang: Language; isIOS: boolean; onClo
           </button>
         </div>
 
+        {/* Visual App Identity Banner */}
+        <div className="bg-[#FAF8F5] p-2.5 rounded-2xl border border-[#E8E2D8] flex items-center gap-3">
+          <img
+            src="/pwa-192x192.png"
+            alt="আমার ঘর"
+            className="w-11 h-11 rounded-xl shadow-xs border border-emerald-900/10 object-cover shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-extrabold">
+              {lang === 'bn' ? 'অফিসিয়াল অ্যাপ' : 'Official Web App'}
+            </span>
+            <h5 className="font-extrabold text-xs text-[#133E2B] truncate mt-0.5">
+              আমার ঘর Online
+            </h5>
+            <p className="text-[10px] text-gray-500 truncate">
+              {lang === 'bn' ? 'হোমস্ক্রিন নাম: ' : 'Home Screen Name: '}
+              <strong className="text-gray-800">আমার ঘর</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Standalone Browser Launcher Warning (Fixes AI Studio wrapper issue) */}
+        <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2 text-left">
+          <div className="flex items-start gap-2">
+            <span className="text-sm shrink-0">💡</span>
+            <div>
+              <p className="font-bold text-xs text-amber-950">
+                {lang === 'bn' ? "সরাসরি 'আমার ঘর' নামে ইনস্টল করার নিয়ম:" : "Direct Installation Note:"}
+              </p>
+              <p className="text-[10.5px] text-amber-900 leading-snug mt-0.5">
+                {lang === 'bn'
+                  ? "গুগল এআই স্টুডিও ফ্রেমের ভেতর থেকে ডাউনলোড দিলে ব্রাউজার মূল এডিটরকে সেভ করে ফেলে। সরাসরি 'আমার ঘর' নামে মোবাইলে রাখতে নিচের লিংকে চাপ দিয়ে ফুল ব্রাউজারে খুলুন:"
+                  : "If previewing inside AI Studio, open in a full browser tab to install cleanly as Amar Ghor:"}
+              </p>
+            </div>
+          </div>
+          <a
+            href={typeof window !== 'undefined' ? window.location.href : '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2 px-3 bg-[#133E2B] hover:bg-[#1B4332] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all text-center cursor-pointer"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-[#E8C547]" />
+            <span>{lang === 'bn' ? 'সরাসরি ব্রাউজারে খুলুন (Open in Chrome)' : 'Open in Full Browser'}</span>
+          </a>
+        </div>
+
         {isIOS ? (
           // iOS Safari Instructions
-          <div className="space-y-3 text-xs text-gray-700">
-            <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
+          <div className="space-y-2.5 text-xs text-gray-700">
+            <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
                 ১
               </span>
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? 'সাফারি ব্রাউজারের নিচে শেয়ার বাটনে চাপুন' : 'Tap Safari Share button'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
@@ -244,12 +297,12 @@ export const InstallGuideModal: React.FC<{ lang: Language; isIOS: boolean; onClo
               </div>
             </div>
 
-            <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
+            <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
                 ২
               </span>
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? '"Add to Home Screen" অপশনটি বেছে নিন' : 'Tap "Add to Home Screen"'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
@@ -260,17 +313,17 @@ export const InstallGuideModal: React.FC<{ lang: Language; isIOS: boolean; onClo
               </div>
             </div>
 
-            <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
+            <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
                 ৩
               </span>
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? 'উপরে "Add" চাপুন' : 'Tap "Add" at the top right'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {lang === 'bn'
-                    ? 'আপনার হোমস্ক্রিনে "আমার ঘর" অ্যাপ তৈরি হয়ে যাবে এবং সেখান থেকে সহজে সব কার্যক্রম পরিচালনা করতে পারবেন।'
+                    ? 'আপনার হোমস্ক্রিনে "আমার ঘর" অ্যাপ তৈরি হয়ে যাবে।'
                     : 'The app icon will appear on your phone home screen.'}
                 </p>
               </div>
@@ -278,33 +331,33 @@ export const InstallGuideModal: React.FC<{ lang: Language; isIOS: boolean; onClo
           </div>
         ) : (
           // Android Chrome Instructions
-          <div className="space-y-3 text-xs text-gray-700">
-            <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
+          <div className="space-y-2.5 text-xs text-gray-700">
+            <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
                 ১
               </span>
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? 'ক্রোম ব্রাউজারের ৩টি ডট (Menu) বাটনে চাপুন' : 'Tap Chrome 3-dots Menu'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
-                  {lang === 'bn' ? 'ব্রাউজারের উপরে ডানপাশের ৩ ডটে ট্যাপ করুন।' : 'At the top-right of your screen.'}
+                  {lang === 'bn' ? 'ব্রাউজারের উপরে ডানপাশের ৩ ডটে (⋮) ট্যাপ করুন।' : 'At the top-right of your screen.'}
                 </p>
               </div>
             </div>
 
-            <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
+            <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
                 ২
               </span>
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? '"Install app" অথবা "Add to Home screen" নির্বাচন করুন' : 'Tap "Install app" or "Add to Home screen"'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {lang === 'bn'
-                    ? 'এরপর "Install" বাটনে ক্লিক করলেই মোবাইল হোমস্ক্রিনে অ্যাপ আইকন চলে আসবে।'
-                    : 'Confirm install to add Amar Ghor to your home screen.'}
+                    ? "সেখানে 'আমার ঘর' দেখতে পাবেন। 'Install' চাপলেই অ্যাপটি মোবাইলে সেভ হয়ে যাবে।"
+                    : "Confirm install to add Amar Ghor to your home screen."}
                 </p>
               </div>
             </div>
