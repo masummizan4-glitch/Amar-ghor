@@ -203,94 +203,137 @@ export const InstallGuideModal: React.FC<{
 }> = ({
   lang,
   isIOS,
-  isInIframe,
+  isInIframe: _isInIframe,
   onClose,
 }) => {
+  const [copied, setCopied] = useState(false);
+  const directUrl = typeof window !== 'undefined'
+    ? (window.location.origin || window.location.href)
+    : 'https://ais-pre-gbnhtenxaui7tam4bmt64b-375809004900.asia-southeast1.run.app';
+
+  const handleCopyLink = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(directUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      }
+    } catch {
+      // fallback
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-[#DDD5C7] space-y-3.5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#DDD5C7] space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+        
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#133E2B] text-white flex items-center justify-center">
-              <Smartphone className="w-4 h-4 text-[#E8C547]" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#133E2B] text-white flex items-center justify-center shadow-xs">
+              <Smartphone className="w-5 h-5 text-[#E8C547]" />
             </div>
             <div>
-              <h4 className="font-extrabold text-sm text-[#133E2B]">
-                {lang === 'bn' ? 'মোবাইলে হোমস্ক্রিনে যুক্ত করার নিয়ম' : 'How to Add to Home Screen'}
+              <h4 className="font-extrabold text-sm sm:text-base text-[#133E2B]">
+                {lang === 'bn' ? "'আমার ঘর' অ্যাপ ইনস্টল করুন" : "Install 'Amar Ghor' App"}
               </h4>
-              <p className="text-[10px] text-gray-500">
-                {isIOS ? 'iPhone / iPad (Safari)' : 'Android / Chrome ব্রাউজার'}
+              <p className="text-[11px] text-gray-500 font-medium">
+                {isIOS ? 'iPhone / iPad (Safari ব্রাউজার)' : 'Android (Google Chrome ব্রাউজার)'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-black rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-gray-400 hover:text-black rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Visual App Identity Banner */}
-        <div className="bg-[#FAF8F5] p-2.5 rounded-2xl border border-[#E8E2D8] flex items-center gap-3">
+        <div className="bg-[#FAF8F5] p-3 rounded-2xl border border-emerald-900/15 flex items-center gap-3 shadow-2xs">
           <img
             src="/pwa-192x192.png"
             alt="আমার ঘর"
-            className="w-11 h-11 rounded-xl shadow-xs border border-emerald-900/10 object-cover shrink-0"
+            className="w-12 h-12 rounded-xl shadow-xs border border-emerald-900/10 object-cover shrink-0"
           />
           <div className="min-w-0 flex-1">
-            <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-extrabold">
-              {lang === 'bn' ? 'অফিসিয়াল অ্যাপ' : 'Official Web App'}
-            </span>
-            <h5 className="font-extrabold text-xs text-[#133E2B] truncate mt-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
+                {lang === 'bn' ? 'অফিসিয়াল অ্যাপ' : 'Official Web App'}
+              </span>
+              <span className="text-[10px] text-emerald-700 font-bold">100% Free</span>
+            </div>
+            <h5 className="font-extrabold text-sm text-[#133E2B] truncate mt-0.5">
               আমার ঘর Online
             </h5>
-            <p className="text-[10px] text-gray-500 truncate">
-              {lang === 'bn' ? 'হোমস্ক্রিন নাম: ' : 'Home Screen Name: '}
-              <strong className="text-gray-800">আমার ঘর</strong>
+            <p className="text-[11px] text-gray-600 truncate">
+              {lang === 'bn' ? 'হোমস্ক্রিনের নাম হবে: ' : 'Home screen title: '}
+              <strong className="text-gray-900 font-extrabold">আমার ঘর</strong>
             </p>
           </div>
         </div>
 
-        {/* Standalone Browser Launcher Warning (Fixes AI Studio wrapper issue) */}
+        {/* Root Cause Explanation for the Google Studio / 'R' icon */}
         <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl space-y-2 text-left">
           <div className="flex items-start gap-2">
-            <span className="text-sm shrink-0">💡</span>
+            <span className="text-base shrink-0">💡</span>
             <div>
-              <p className="font-bold text-xs text-amber-950">
-                {lang === 'bn' ? "সরাসরি 'আমার ঘর' নামে ইনস্টল করার নিয়ম:" : "Direct Installation Note:"}
-              </p>
-              <p className="text-[10.5px] text-amber-900 leading-snug mt-0.5">
+              <p className="font-extrabold text-xs text-amber-950">
                 {lang === 'bn'
-                  ? "গুগল এআই স্টুডিও ফ্রেমের ভেতর থেকে ডাউনলোড দিলে ব্রাউজার মূল এডিটরকে সেভ করে ফেলে। সরাসরি 'আমার ঘর' নামে মোবাইলে রাখতে নিচের লিংকে চাপ দিয়ে ফুল ব্রাউজারে খুলুন:"
-                  : "If previewing inside AI Studio, open in a full browser tab to install cleanly as Amar Ghor:"}
+                  ? "কেন আগে 'গুগল স্টুডিও' বা ধূসর 'R' আইকন এসেছিল?"
+                  : "Why did you see 'Google Studio' or an 'R' icon previously?"}
+              </p>
+              <p className="text-[11px] text-amber-900 leading-relaxed mt-1">
+                {lang === 'bn'
+                  ? "আপনি গুগল এআই স্টুডিওর এডিটর স্ক্রিনের ভেতর থাকায় ব্রাউজার মূল এডিটরকে শর্টকাট করেছিল। সরাসরি নিজস্ব 'আমার ঘর' লোগোসহ ইনস্টল করতে নিচে ক্রোম ব্রাউজারে খুলুন:"
+                  : "Because the page was opened inside the AI Studio frame. To install cleanly as 'Amar Ghor', open directly in Google Chrome:"}
               </p>
             </div>
           </div>
-          <a
-            href={typeof window !== 'undefined' ? window.location.href : '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-2 px-3 bg-[#133E2B] hover:bg-[#1B4332] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all text-center cursor-pointer"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-[#E8C547]" />
-            <span>{lang === 'bn' ? 'সরাসরি ব্রাউজারে খুলুন (Open in Chrome)' : 'Open in Full Browser'}</span>
-          </a>
+
+          <div className="pt-1 flex flex-col sm:flex-row items-stretch gap-2">
+            <a
+              href={directUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 py-2.5 px-3 bg-[#133E2B] hover:bg-[#1B4332] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all text-center cursor-pointer"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-[#E8C547]" />
+              <span>{lang === 'bn' ? 'ক্রোম ব্রাউজারে সরাসরি খুলুন' : 'Open in Chrome Browser'}</span>
+            </a>
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="py-2.5 px-3 bg-white hover:bg-gray-50 border border-amber-300 text-amber-950 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">{lang === 'bn' ? 'কপি হয়েছে!' : 'Copied!'}</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-3.5 h-3.5 text-amber-800" />
+                  <span>{lang === 'bn' ? 'লিংক কপি করুন' : 'Copy Link'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {isIOS ? (
           // iOS Safari Instructions
-          <div className="space-y-2.5 text-xs text-gray-700">
+          <div className="space-y-2 text-xs text-gray-700">
+            <h6 className="font-extrabold text-xs text-gray-900">আইফোনে সেভ করার নিয়ম:</h6>
             <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                ১
-              </span>
+              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">১</span>
               <div>
                 <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? 'সাফারি ব্রাউজারের নিচে শেয়ার বাটনে চাপুন' : 'Tap Safari Share button'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
-                  <span>স্ক্রিনের নিচে</span>
+                  <span>নিচে</span>
                   <Share2 className="w-3.5 h-3.5 text-blue-600 inline" />
                   <span>আইকনটিতে ট্যাপ করুন।</span>
                 </p>
@@ -298,9 +341,7 @@ export const InstallGuideModal: React.FC<{
             </div>
 
             <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                ২
-              </span>
+              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">২</span>
               <div>
                 <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? '"Add to Home Screen" অপশনটি বেছে নিন' : 'Tap "Add to Home Screen"'}
@@ -308,22 +349,20 @@ export const InstallGuideModal: React.FC<{
                 <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
                   <span>মেনু স্ক্রোল করে</span>
                   <PlusSquare className="w-3.5 h-3.5 text-gray-700 inline" />
-                  <span>বাটনটিতে ক্লিক করুন।</span>
+                  <span>বাটনে চাপুন।</span>
                 </p>
               </div>
             </div>
 
             <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                ৩
-              </span>
+              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">৩</span>
               <div>
                 <p className="font-bold text-gray-900 text-xs">
                   {lang === 'bn' ? 'উপরে "Add" চাপুন' : 'Tap "Add" at the top right'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {lang === 'bn'
-                    ? 'আপনার হোমস্ক্রিনে "আমার ঘর" অ্যাপ তৈরি হয়ে যাবে।'
+                    ? 'আপনার হোমস্ক্রিনে "আমার ঘর" অ্যাপ যোগ হয়ে যাবে।'
                     : 'The app icon will appear on your phone home screen.'}
                 </p>
               </div>
@@ -331,32 +370,41 @@ export const InstallGuideModal: React.FC<{
           </div>
         ) : (
           // Android Chrome Instructions
-          <div className="space-y-2.5 text-xs text-gray-700">
+          <div className="space-y-2 text-xs text-gray-700">
+            <h6 className="font-extrabold text-xs text-gray-900">
+              {lang === 'bn' ? 'অ্যান্ড্রয়েড ফোনে সঠিক ইনস্টল পদ্ধতি:' : 'Android Installation Steps:'}
+            </h6>
+            
+            <div className="p-2.5 bg-red-50/80 rounded-xl border border-red-200 flex items-start gap-2 text-[11px] text-red-900">
+              <span className="shrink-0 font-bold">🗑️</span>
+              <p>
+                {lang === 'bn'
+                  ? "প্রথমে ফোনের স্ক্রিনে আগের যে ধূসর 'R' বা গুগল স্টুডিও শর্টকাটটি এসেছে, সেটির উপর চেপে ধরে 'Remove/Delete' করে দিন।"
+                  : "First, remove the old grey 'R' or Google Studio shortcut from your home screen."}
+              </p>
+            </div>
+
             <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                ১
-              </span>
+              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">১</span>
               <div>
                 <p className="font-bold text-gray-900 text-xs">
-                  {lang === 'bn' ? 'ক্রোম ব্রাউজারের ৩টি ডট (Menu) বাটনে চাপুন' : 'Tap Chrome 3-dots Menu'}
+                  {lang === 'bn' ? 'ক্রোম ব্রাউজারে ৩টি ডট (Menu ⋮) চাপুন' : 'Tap Chrome 3-dots Menu'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
-                  {lang === 'bn' ? 'ব্রাউজারের উপরে ডানপাশের ৩ ডটে (⋮) ট্যাপ করুন।' : 'At the top-right of your screen.'}
+                  {lang === 'bn' ? 'ডানদিকের কোণায় ৩ ডটে (⋮) ট্যাপ করুন।' : 'At the top-right of your screen.'}
                 </p>
               </div>
             </div>
 
             <div className="p-2.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                ২
-              </span>
+              <span className="w-5 h-5 rounded-full bg-[#133E2B] text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">২</span>
               <div>
                 <p className="font-bold text-gray-900 text-xs">
-                  {lang === 'bn' ? '"Install app" অথবা "Add to Home screen" নির্বাচন করুন' : 'Tap "Install app" or "Add to Home screen"'}
+                  {lang === 'bn' ? '"Install app" (বা "Add to Home screen") চাপুন' : 'Tap "Install app" or "Add to Home screen"'}
                 </p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {lang === 'bn'
-                    ? "সেখানে 'আমার ঘর' দেখতে পাবেন। 'Install' চাপলেই অ্যাপটি মোবাইলে সেভ হয়ে যাবে।"
+                    ? "সেখানে 'আমার ঘর' এবং সবুজ লোগো দেখতে পাবেন। 'Install' চাপলেই অ্যাপটি সরাসরি ইনস্টল হয়ে যাবে!"
                     : "Confirm install to add Amar Ghor to your home screen."}
                 </p>
               </div>
@@ -366,7 +414,7 @@ export const InstallGuideModal: React.FC<{
 
         <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 flex items-center gap-2 text-[11px] text-emerald-900">
           <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span>{lang === 'bn' ? 'এটি কোনো মেমোরি খরচ করে না এবং ১০০% নিরাপদ।' : '100% secure, lightweight PWA.'}</span>
+          <span>{lang === 'bn' ? 'কোনো স্টোরেজ খরচ নেই, লাইটওয়েট এবং অফলাইনেও কাজ করে।' : 'Lightweight, offline-capable official PWA.'}</span>
         </div>
 
         <button
@@ -380,3 +428,4 @@ export const InstallGuideModal: React.FC<{
     </div>
   );
 };
+

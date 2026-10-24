@@ -21,8 +21,22 @@ app.get(['/healthz', '/_health', '/api/health'], (_req, res) => {
 app.get(['/manifest.webmanifest', '/manifest.json'], (_req, res) => {
   const manifestPath = path.join(__dirname, 'public', 'manifest.webmanifest');
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(manifestPath);
 });
+
+// Explicit Service Worker endpoint for PWA installability and WebAPK generation
+app.get(['/sw.js', '/service-worker.js'], (_req, res) => {
+  const swPath = path.join(__dirname, 'public', 'sw.js');
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(swPath);
+});
+
+// Serve public static assets (icons, images, manifests)
+app.use(express.static(path.join(__dirname, 'public')));
+
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
