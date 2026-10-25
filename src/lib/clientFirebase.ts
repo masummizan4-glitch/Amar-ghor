@@ -4,6 +4,58 @@ import { Product, SiteSettings, Order, ContactMessage, BlacklistEntry, CustomerR
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let firestoreInstance: any = null;
+let clientQuotaExceededUntil = 0;
+const CLIENT_QUOTA_STORAGE_KEY = 'amarghor_client_firestore_quota_until';
+
+/**
+ * Strict timeout wrapper: guarantees that no Cloud Firestore call can hang or buffer the UI
+ */
+export function withTimeout<T>(promise: Promise<T>, ms = 2500, fallbackVal?: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve, reject) => {
+      setTimeout(() => {
+        if (fallbackVal !== undefined) {
+          resolve(fallbackVal);
+        } else {
+          reject(new Error(`[ClientFirebase] Operation timed out after ${ms}ms`));
+        }
+      }, ms);
+    })
+  ]);
+}
+
+export function isClientQuotaExceeded(): boolean {
+  if (clientQuotaExceededUntil > Date.now()) return true;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = localStorage.getItem(CLIENT_QUOTA_STORAGE_KEY);
+      if (stored) {
+        const val = Number(stored);
+        if (val > Date.now()) {
+          clientQuotaExceededUntil = val;
+          return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
+export function handleClientFirestoreError(err: any, context: string): void {
+  const msg = String(err?.message || err || '');
+  if (err?.code === 'resource-exhausted' || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota limit exceeded')) {
+    clientQuotaExceededUntil = Date.now() + 30 * 60 * 1000;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(CLIENT_QUOTA_STORAGE_KEY, String(clientQuotaExceededUntil));
+      }
+    } catch {}
+    console.warn(`[ClientFirebase] Free quota reached (${context}). Pausing direct cloud write attempts for 30m; local/server storage active.`);
+  } else {
+    console.warn(`[ClientFirebase] ${context} error:`, msg);
+  }
+}
 
 export function getClientFirestoreDb() {
   if (firestoreInstance) return firestoreInstance;
@@ -22,13 +74,14 @@ export function getClientFirestoreDb() {
  * Load products from Cloud Firestore (runs directly in browser when on Netlify or server is unreachable)
  */
 export async function loadProductsFromCloud(): Promise<Product[] | null> {
+  if (isClientQuotaExceeded()) return null;
   const db = getClientFirestoreDb();
   if (!db) return null;
 
   try {
     const prodRef = doc(db, 'app_store', 'products');
-    const snap = await getDoc(prodRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(prodRef), 2500, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const data = snap.data();
       if (Array.isArray(data?.items) && data.items.length > 0) {
         return data.items as Product[];
@@ -36,7 +89,7 @@ export async function loadProductsFromCloud(): Promise<Product[] | null> {
     }
     return null;
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadProductsFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadProductsFromCloud');
     return null;
   }
 }
@@ -45,13 +98,14 @@ export async function loadProductsFromCloud(): Promise<Product[] | null> {
  * Load settings from Cloud Firestore
  */
 export async function loadSettingsFromCloud(): Promise<Partial<SiteSettings> | null> {
+  if (isClientQuotaExceeded()) return null;
   const db = getClientFirestoreDb();
   if (!db) return null;
 
   try {
     const settRef = doc(db, 'app_store', 'settings');
-    const snap = await getDoc(settRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(settRef), 2500, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const data = snap.data();
       if (data?.data) {
         return data.data as Partial<SiteSettings>;
@@ -59,43 +113,47 @@ export async function loadSettingsFromCloud(): Promise<Partial<SiteSettings> | n
     }
     return null;
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadSettingsFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadSettingsFromCloud');
     return null;
   }
 }
 
 /**
- * Save an order directly to Cloud Firestore (ensures orders on Netlify are never lost)
+ * Save an order directly to Cloud Firestore (guaranteed fast non-blocking timeout)
  */
 export async function saveOrderToCloud(order: Order): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
-    // 1. Save to dedicated orders collection
     const orderDocRef = doc(db, 'orders', order.orderId || ('ord-' + Date.now()));
-    await setDoc(orderDocRef, {
-      ...order,
-      source: 'web_client',
-      createdAt: order.createdAt || new Date().toISOString()
-    });
+    await withTimeout(
+      setDoc(orderDocRef, {
+        ...order,
+        source: 'web_client',
+        createdAt: order.createdAt || new Date().toISOString()
+      }),
+      2500
+    );
 
-    // 2. Also append to app_store/orders list for admin dashboard
+    // Also best-effort append to app_store/orders list for admin dashboard
     try {
       const ordersStoreRef = doc(db, 'app_store', 'orders');
-      const storeSnap = await getDoc(ordersStoreRef);
-      const existingList = storeSnap.exists() ? storeSnap.data()?.items || [] : [];
-      await setDoc(ordersStoreRef, {
-        items: [order, ...existingList.filter((o: any) => o.orderId !== order.orderId)],
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    } catch (e) {
-      console.warn('[ClientFirebase] append to app_store/orders warning:', e);
-    }
+      const storeSnap = await withTimeout(getDoc(ordersStoreRef), 2000, null as any);
+      const existingList = storeSnap && storeSnap.exists() ? storeSnap.data()?.items || [] : [];
+      await withTimeout(
+        setDoc(ordersStoreRef, {
+          items: [order, ...existingList.filter((o: any) => o.orderId !== order.orderId)],
+          updatedAt: new Date().toISOString()
+        }, { merge: true }),
+        2000
+      );
+    } catch {}
 
     return true;
   } catch (err: any) {
-    console.error('[ClientFirebase] saveOrderToCloud failed:', err?.message || err);
+    handleClientFirestoreError(err, 'saveOrderToCloud');
     return false;
   }
 }
@@ -104,18 +162,22 @@ export async function saveOrderToCloud(order: Order): Promise<boolean> {
  * Save a contact message to Cloud Firestore
  */
 export async function saveContactToCloud(msg: { name: string; phone: string; email?: string; message: string }): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const contactRef = collection(db, 'contacts');
-    await addDoc(contactRef, {
-      ...msg,
-      createdAt: new Date().toISOString()
-    });
+    await withTimeout(
+      addDoc(contactRef, {
+        ...msg,
+        createdAt: new Date().toISOString()
+      }),
+      2500
+    );
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveContactToCloud failed:', err?.message || err);
+    handleClientFirestoreError(err, 'saveContactToCloud');
     return false;
   }
 }
@@ -124,18 +186,22 @@ export async function saveContactToCloud(msg: { name: string; phone: string; ema
  * Save products to Cloud Firestore
  */
 export async function saveProductsToCloud(products: Product[]): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const prodRef = doc(db, 'app_store', 'products');
-    await setDoc(prodRef, {
-      items: products,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await withTimeout(
+      setDoc(prodRef, {
+        items: products,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }),
+      2500
+    );
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveProductsToCloud failed:', err?.message || err);
+    handleClientFirestoreError(err, 'saveProductsToCloud');
     return false;
   }
 }
@@ -144,18 +210,22 @@ export async function saveProductsToCloud(products: Product[]): Promise<boolean>
  * Save settings to Cloud Firestore
  */
 export async function saveSettingsToCloud(settings: Partial<SiteSettings>): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const settRef = doc(db, 'app_store', 'settings');
-    await setDoc(settRef, {
-      data: settings,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await withTimeout(
+      setDoc(settRef, {
+        data: settings,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }),
+      2500
+    );
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveSettingsToCloud failed:', err?.message || err);
+    handleClientFirestoreError(err, 'saveSettingsToCloud');
     return false;
   }
 }
@@ -164,28 +234,31 @@ export async function saveSettingsToCloud(settings: Partial<SiteSettings>): Prom
  * Save image to Cloud Firestore permanently (under 1MB base64)
  */
 export async function saveImageToCloud(id: string, dataUrl: string, contentType: string = 'image/jpeg'): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, '');
     const imgRef = doc(db, 'app_images', cleanId);
-    await setDoc(imgRef, {
-      id: cleanId,
-      dataUrl,
-      contentType,
-      createdAt: new Date().toISOString()
-    });
+    await withTimeout(
+      setDoc(imgRef, {
+        id: cleanId,
+        dataUrl,
+        contentType,
+        createdAt: new Date().toISOString()
+      }),
+      2500
+    );
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveImageToCloud failed:', err?.message || err);
+    handleClientFirestoreError(err, 'saveImageToCloud');
     return false;
   }
 }
 
 /**
  * Verify admin password directly with Cloud Firestore or Master Passwords
- * (Allows logging in on Netlify, serverless hosts, or offline)
  */
 export async function verifyAdminPasswordInCloud(password: string): Promise<boolean> {
   const cleanPass = String(password || '').trim();
@@ -197,14 +270,14 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
   }
 
   const db = getClientFirestoreDb();
-  if (!db) {
+  if (!db || isClientQuotaExceeded()) {
     return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026';
   }
 
   try {
     const secRef = doc(db, 'app_store', 'security');
-    const snap = await getDoc(secRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(secRef), 2000, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const data = snap.data();
       const stored = String(data?.adminPasswordHash || '').trim();
       if (stored && cleanPass === stored) {
@@ -212,7 +285,7 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
       }
     }
   } catch (err) {
-    console.warn('[ClientFirebase] verifyAdminPasswordInCloud error:', err);
+    console.warn('[ClientFirebase] verifyAdminPasswordInCloud note:', err);
   }
 
   return cleanPass === 'Masum@1992' || cleanPass === 'amarghor2026';
@@ -222,13 +295,14 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
  * Load orders from Cloud Firestore
  */
 export async function loadOrdersFromCloud(): Promise<Order[]> {
+  if (isClientQuotaExceeded()) return [];
   const db = getClientFirestoreDb();
   if (!db) return [];
 
   try {
     const storeRef = doc(db, 'app_store', 'orders');
-    const snap = await getDoc(storeRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(storeRef), 2500, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const items = snap.data()?.items;
       if (Array.isArray(items) && items.length > 0) {
         return items as Order[];
@@ -237,10 +311,10 @@ export async function loadOrdersFromCloud(): Promise<Order[]> {
 
     // Also check dedicated collection 'orders'
     const colRef = collection(db, 'orders');
-    const colSnap = await getDocs(colRef);
-    if (!colSnap.empty) {
+    const colSnap = await withTimeout(getDocs(colRef), 2500, null as any);
+    if (colSnap && !colSnap.empty) {
       const list: Order[] = [];
-      colSnap.forEach((d) => {
+      colSnap.forEach((d: any) => {
         list.push(d.data() as Order);
       });
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -249,7 +323,7 @@ export async function loadOrdersFromCloud(): Promise<Order[]> {
 
     return [];
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadOrdersFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadOrdersFromCloud');
     return [];
   }
 }
@@ -258,15 +332,16 @@ export async function loadOrdersFromCloud(): Promise<Order[]> {
  * Load contact messages from Cloud Firestore
  */
 export async function loadMessagesFromCloud(): Promise<ContactMessage[]> {
+  if (isClientQuotaExceeded()) return [];
   const db = getClientFirestoreDb();
   if (!db) return [];
 
   try {
     const colRef = collection(db, 'contacts');
-    const colSnap = await getDocs(colRef);
-    if (!colSnap.empty) {
+    const colSnap = await withTimeout(getDocs(colRef), 2500, null as any);
+    if (colSnap && !colSnap.empty) {
       const list: ContactMessage[] = [];
-      colSnap.forEach((d) => {
+      colSnap.forEach((d: any) => {
         list.push({ id: d.id, ...(d.data() as any) });
       });
       list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -274,13 +349,13 @@ export async function loadMessagesFromCloud(): Promise<ContactMessage[]> {
     }
 
     const secRef = doc(db, 'app_store', 'security');
-    const snap = await getDoc(secRef);
-    if (snap.exists() && Array.isArray(snap.data()?.contacts)) {
+    const snap = await withTimeout(getDoc(secRef), 2000, null as any);
+    if (snap && snap.exists && snap.exists() && Array.isArray(snap.data()?.contacts)) {
       return snap.data()?.contacts;
     }
     return [];
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadMessagesFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadMessagesFromCloud');
     return [];
   }
 }
@@ -289,18 +364,19 @@ export async function loadMessagesFromCloud(): Promise<ContactMessage[]> {
  * Load blacklist from Cloud Firestore
  */
 export async function loadBlacklistFromCloud(): Promise<BlacklistEntry[]> {
+  if (isClientQuotaExceeded()) return [];
   const db = getClientFirestoreDb();
   if (!db) return [];
 
   try {
     const secRef = doc(db, 'app_store', 'security');
-    const snap = await getDoc(secRef);
-    if (snap.exists() && Array.isArray(snap.data()?.blacklist)) {
+    const snap = await withTimeout(getDoc(secRef), 2000, null as any);
+    if (snap && snap.exists && snap.exists() && Array.isArray(snap.data()?.blacklist)) {
       return snap.data()?.blacklist;
     }
     return [];
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadBlacklistFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadBlacklistFromCloud');
     return [];
   }
 }
@@ -309,15 +385,19 @@ export async function loadBlacklistFromCloud(): Promise<BlacklistEntry[]> {
  * Save blacklist to Cloud Firestore
  */
 export async function saveBlacklistToCloud(blacklist: BlacklistEntry[]): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const secRef = doc(db, 'app_store', 'security');
-    await setDoc(secRef, { blacklist, updatedAt: new Date().toISOString() }, { merge: true });
+    await withTimeout(
+      setDoc(secRef, { blacklist, updatedAt: new Date().toISOString() }, { merge: true }),
+      2500
+    );
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveBlacklistToCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'saveBlacklistToCloud');
     return false;
   }
 }
@@ -326,6 +406,7 @@ export async function saveBlacklistToCloud(blacklist: BlacklistEntry[]): Promise
  * Update order status in Cloud Firestore
  */
 export async function updateOrderStatusInCloud(orderId: string, status: string, paymentStatus?: string): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
@@ -333,11 +414,11 @@ export async function updateOrderStatusInCloud(orderId: string, status: string, 
     const orderDocRef = doc(db, 'orders', orderId);
     const updateData: any = { status, updatedAt: new Date().toISOString() };
     if (paymentStatus) updateData.paymentStatus = paymentStatus;
-    await setDoc(orderDocRef, updateData, { merge: true });
+    await withTimeout(setDoc(orderDocRef, updateData, { merge: true }), 2500);
 
     const storeRef = doc(db, 'app_store', 'orders');
-    const snap = await getDoc(storeRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(storeRef), 2000, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const items: Order[] = snap.data()?.items || [];
       const updated = items.map((o) => {
         if (o.orderId === orderId) {
@@ -350,11 +431,11 @@ export async function updateOrderStatusInCloud(orderId: string, status: string, 
         }
         return o;
       });
-      await setDoc(storeRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+      await withTimeout(setDoc(storeRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true }), 2000);
     }
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] updateOrderStatusInCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'updateOrderStatusInCloud');
     return false;
   }
 }
@@ -363,15 +444,16 @@ export async function updateOrderStatusInCloud(orderId: string, status: string, 
  * Change admin password in Cloud Firestore
  */
 export async function changeAdminPasswordInCloud(newPassword: string): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const secRef = doc(db, 'app_store', 'security');
-    await setDoc(secRef, { adminPasswordHash: newPassword, updatedAt: new Date().toISOString() }, { merge: true });
+    await withTimeout(setDoc(secRef, { adminPasswordHash: newPassword, updatedAt: new Date().toISOString() }, { merge: true }), 2500);
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] changeAdminPasswordInCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'changeAdminPasswordInCloud');
     return false;
   }
 }
@@ -380,13 +462,14 @@ export async function changeAdminPasswordInCloud(newPassword: string): Promise<b
  * Load customer reviews from Cloud Firestore
  */
 export async function loadReviewsFromCloud(): Promise<CustomerReview[] | null> {
+  if (isClientQuotaExceeded()) return null;
   const db = getClientFirestoreDb();
   if (!db) return null;
 
   try {
     const revRef = doc(db, 'app_store', 'reviews');
-    const snap = await getDoc(revRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(revRef), 2500, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const items = snap.data()?.items;
       if (Array.isArray(items)) {
         return items as CustomerReview[];
@@ -394,7 +477,7 @@ export async function loadReviewsFromCloud(): Promise<CustomerReview[] | null> {
     }
     return null;
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadReviewsFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadReviewsFromCloud');
     return null;
   }
 }
@@ -403,18 +486,19 @@ export async function loadReviewsFromCloud(): Promise<CustomerReview[] | null> {
  * Save a new customer review to Cloud Firestore
  */
 export async function saveReviewToCloud(review: CustomerReview): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const revRef = doc(db, 'app_store', 'reviews');
-    const snap = await getDoc(revRef);
-    const existing: CustomerReview[] = snap.exists() ? snap.data()?.items || [] : [];
+    const snap = await withTimeout(getDoc(revRef), 2000, null as any);
+    const existing: CustomerReview[] = snap && snap.exists && snap.exists() ? snap.data()?.items || [] : [];
     const updated = [review, ...existing];
-    await setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+    await withTimeout(setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true }), 2500);
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveReviewToCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'saveReviewToCloud');
     return false;
   }
 }
@@ -423,20 +507,21 @@ export async function saveReviewToCloud(review: CustomerReview): Promise<boolean
  * Delete a review from Cloud Firestore
  */
 export async function deleteReviewFromCloud(id: string): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const revRef = doc(db, 'app_store', 'reviews');
-    const snap = await getDoc(revRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(revRef), 2000, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const existing: CustomerReview[] = snap.data()?.items || [];
       const updated = existing.filter((r) => r.id !== id);
-      await setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
+      await withTimeout(setDoc(revRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true }), 2500);
     }
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] deleteReviewFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'deleteReviewFromCloud');
     return false;
   }
 }
@@ -445,13 +530,14 @@ export async function deleteReviewFromCloud(id: string): Promise<boolean> {
  * Load screenshot reviews from Cloud Firestore
  */
 export async function loadScreenshotReviewsFromCloud(): Promise<ScreenshotReview[] | null> {
+  if (isClientQuotaExceeded()) return null;
   const db = getClientFirestoreDb();
   if (!db) return null;
 
   try {
     const ssRef = doc(db, 'app_store', 'screenshot_reviews');
-    const snap = await getDoc(ssRef);
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(ssRef), 2500, null as any);
+    if (snap && snap.exists && snap.exists()) {
       const items = snap.data()?.items;
       if (Array.isArray(items) && items.length > 0) {
         return items as ScreenshotReview[];
@@ -459,7 +545,7 @@ export async function loadScreenshotReviewsFromCloud(): Promise<ScreenshotReview
     }
     return null;
   } catch (err: any) {
-    console.warn('[ClientFirebase] loadScreenshotReviewsFromCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'loadScreenshotReviewsFromCloud');
     return null;
   }
 }
@@ -468,15 +554,16 @@ export async function loadScreenshotReviewsFromCloud(): Promise<ScreenshotReview
  * Save screenshot reviews array to Cloud Firestore
  */
 export async function saveScreenshotReviewsToCloud(reviews: ScreenshotReview[]): Promise<boolean> {
+  if (isClientQuotaExceeded()) return false;
   const db = getClientFirestoreDb();
   if (!db) return false;
 
   try {
     const ssRef = doc(db, 'app_store', 'screenshot_reviews');
-    await setDoc(ssRef, { items: reviews, updatedAt: new Date().toISOString() }, { merge: true });
+    await withTimeout(setDoc(ssRef, { items: reviews, updatedAt: new Date().toISOString() }, { merge: true }), 2500);
     return true;
   } catch (err: any) {
-    console.warn('[ClientFirebase] saveScreenshotReviewsToCloud error:', err?.message || err);
+    handleClientFirestoreError(err, 'saveScreenshotReviewsToCloud');
     return false;
   }
 }

@@ -488,7 +488,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       const updated = adminScreenshotReviews.filter((s) => s.id !== id);
       setAdminScreenshotReviews(updated);
-      await saveScreenshotReviewsToCloud(updated).catch(() => {});
+      saveScreenshotReviewsToCloud(updated).catch(() => {});
       onRefreshScreenshotReviews?.();
     } catch (err) {
       console.error('Failed to delete screenshot review:', err);
@@ -580,7 +580,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (!saved) {
         const updated = [newReviewItem, ...adminScreenshotReviews];
         setAdminScreenshotReviews(updated);
-        await saveScreenshotReviewsToCloud(updated).catch(() => {});
+        saveScreenshotReviewsToCloud(updated).catch(() => {});
       }
 
       setShowAddScreenshotModal(false);
@@ -850,7 +850,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         } else {
           updatedList = [productToSave as Product, ...products];
         }
-        await saveProductsToCloud(updatedList).catch((e) => console.warn('Cloud product sync warning:', e));
+        saveProductsToCloud(updatedList).catch((e) => console.warn('Cloud product sync warning:', e));
       }
 
       setEditingProduct(null);
@@ -878,9 +878,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         console.warn('Backend delete unreachable:', e);
       }
 
-      // Sync to cloud Firestore directly
+      // Sync to cloud Firestore in background
       const remaining = products.filter((p) => p.id !== productId);
-      await saveProductsToCloud(remaining).catch(() => {});
+      saveProductsToCloud(remaining).catch(() => {});
       onRefreshProducts();
     } catch (err) {
       console.error('Delete failed:', err);
@@ -1045,7 +1045,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setSettingsSuccess(false);
 
     try {
-      let saved = false;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
       try {
         const res = await fetch('/api/settings', {
           method: 'PUT',
@@ -1053,17 +1055,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           body: JSON.stringify({
             adminToken: token,
             settings: settingsForm
-          })
+          }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+
         if (res.ok) {
           const data = await res.json();
-          if (data.success) {
+          if (data.success && data.settings) {
             onUpdateSettings(data.settings);
-            saved = true;
           }
         }
       } catch (e) {
-        console.warn('Backend settings save unreachable, saving to cloud:', e);
+        clearTimeout(timeoutId);
+        console.warn('Backend settings save unreachable, saving to cloud/local:', e);
       }
 
       // Save live domain to localStorage for client-side sharing helpers
@@ -1071,8 +1076,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         localStorage.setItem('amarghor_live_domain', settingsForm.liveSiteUrl.trim());
       }
 
-      // Always persist to Cloud Firestore for permanent multi-platform availability
-      await saveSettingsToCloud(settingsForm).catch((e) => console.warn('Cloud settings sync warning:', e));
+      // Non-blocking background sync to Cloud Firestore
+      saveSettingsToCloud(settingsForm).catch((e) => console.warn('Cloud settings sync warning:', e));
 
       onUpdateSettings(settingsForm);
       setSettingsSuccess(true);

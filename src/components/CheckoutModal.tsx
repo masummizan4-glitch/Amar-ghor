@@ -234,11 +234,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       };
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         const response = await fetch('/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(orderPayload)
+          body: JSON.stringify(orderPayload),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (response.ok) {
           const contentType = response.headers.get('content-type') || '';
@@ -248,12 +253,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               createdOrderObj = data.order;
             }
           }
+        } else {
+          try {
+            const errData = await response.json();
+            if (errData?.error) {
+              setError(errData.error);
+              setLoading(false);
+              return;
+            }
+          } catch {}
         }
-      } catch (e) {
-        console.warn('API /api/orders failed, switching to cloud/local fallback:', e);
+      } catch (e: any) {
+        if (e.name === 'AbortError') {
+          console.warn('API /api/orders timed out, activating client fallback');
+        } else {
+          console.warn('API /api/orders failed, activating client fallback:', e);
+        }
       }
 
-      // If backend was unreachable (e.g. running statically on Netlify), construct order and save to Firestore
+      // If backend was unreachable (e.g. offline or serverless), construct order and save
       if (!createdOrderObj) {
         const orderNumber = 'AGO-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
         createdOrderObj = {
@@ -292,10 +310,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           paymentStatus: paymentMethod === 'cod' ? 'unpaid' : 'pending_verification'
         };
 
-        // Persist to Cloud Firestore so store owner receives the order
-        await saveOrderToCloud(createdOrderObj).catch((e) => console.warn('Cloud order write error:', e));
+        // Non-blocking background sync to Cloud Firestore
+        saveOrderToCloud(createdOrderObj).catch((e) => console.warn('Cloud order write note:', e));
 
-        // Also cache in customer's local storage
+        // Also cache in customer's local storage immediately
         try {
           const savedOrders = JSON.parse(localStorage.getItem('amarghor_orders') || '[]');
           localStorage.setItem('amarghor_orders', JSON.stringify([createdOrderObj, ...savedOrders]));

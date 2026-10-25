@@ -4,6 +4,35 @@ import fs from 'fs';
 import path from 'path';
 
 let firestoreInstance: any = null;
+let quotaExceededUntil = 0;
+const QUOTA_FILE = path.resolve(process.cwd(), 'data', '.firestore_quota.json');
+
+function getQuotaExceededUntil(): number {
+  if (quotaExceededUntil > Date.now()) return quotaExceededUntil;
+  try {
+    if (fs.existsSync(QUOTA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(QUOTA_FILE, 'utf-8'));
+      if (data?.exceededUntil && typeof data.exceededUntil === 'number') {
+        quotaExceededUntil = data.exceededUntil;
+        return quotaExceededUntil;
+      }
+    }
+  } catch {}
+  return quotaExceededUntil;
+}
+
+export function setFirestoreQuotaExceeded(durationMs: number = 30 * 60 * 1000): void {
+  quotaExceededUntil = Date.now() + durationMs;
+  try {
+    const dir = path.dirname(QUOTA_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(QUOTA_FILE, JSON.stringify({ exceededUntil: quotaExceededUntil, recordedAt: new Date().toISOString() }), 'utf-8');
+  } catch {}
+}
+
+export function isFirestoreQuotaExceeded(): boolean {
+  return Date.now() < getQuotaExceededUntil();
+}
 
 export function getFirestoreDb() {
   if (firestoreInstance) return firestoreInstance;
@@ -33,6 +62,10 @@ export function getFirestoreDb() {
  * Sync entire DB state to Cloud Firestore
  */
 export async function syncToFirestore(dbData: any): Promise<boolean> {
+  if (isFirestoreQuotaExceeded()) {
+    return false;
+  }
+
   const db = getFirestoreDb();
   if (!db) return false;
 
@@ -76,7 +109,13 @@ export async function syncToFirestore(dbData: any): Promise<boolean> {
 
     return true;
   } catch (err: any) {
-    console.error('[Firestore] Sync to cloud failed:', err?.message || err);
+    const msg = String(err?.message || err);
+    if (err?.code === 'resource-exhausted' || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota limit exceeded')) {
+      setFirestoreQuotaExceeded(30 * 60 * 1000);
+      console.warn('[Firestore] Free daily write quota reached (RESOURCE_EXHAUSTED). Cloud sync paused for 30 minutes; local db.json is handling all operations seamlessly.');
+    } else {
+      console.error('[Firestore] Sync to cloud failed:', msg);
+    }
     return false;
   }
 }
@@ -130,6 +169,10 @@ export async function loadFromFirestore(): Promise<any | null> {
  * Save an uploaded image to Cloud Firestore permanently
  */
 export async function saveImageToFirestore(id: string, dataUrl: string, contentType: string = 'image/jpeg'): Promise<boolean> {
+  if (isFirestoreQuotaExceeded()) {
+    return false;
+  }
+
   const db = getFirestoreDb();
   if (!db) return false;
 
@@ -145,7 +188,13 @@ export async function saveImageToFirestore(id: string, dataUrl: string, contentT
     console.log('[Firestore] Image saved permanently to cloud:', cleanId);
     return true;
   } catch (err: any) {
-    console.error('[Firestore] Failed to save image to cloud:', err?.message || err);
+    const msg = String(err?.message || err);
+    if (err?.code === 'resource-exhausted' || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota limit exceeded')) {
+      setFirestoreQuotaExceeded(30 * 60 * 1000);
+      console.warn('[Firestore] Free daily write quota reached on image save. Pausing cloud image writes for 30 minutes.');
+    } else {
+      console.error('[Firestore] Failed to save image to cloud:', msg);
+    }
     return false;
   }
 }

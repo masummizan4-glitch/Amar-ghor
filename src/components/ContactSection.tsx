@@ -48,8 +48,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ lang, settings }
       }
 
       if (!sent) {
-        // Fallback directly to Cloud Firestore (Netlify / serverless support)
-        await saveContactToCloud({ name, phone, email, message });
+        // Fallback directly to Cloud Firestore in background
+        saveContactToCloud({ name, phone, email, message }).catch(() => {});
         sent = true;
       }
 

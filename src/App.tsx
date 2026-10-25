@@ -320,9 +320,9 @@ export default function App() {
         // API offline
       }
 
-      // 2. Cloud Firestore fallback
+      // 2. Cloud Firestore fallback in background
       if (!saved) {
-        await saveReviewToCloud(reviewObj).catch(() => {});
+        saveReviewToCloud(reviewObj).catch(() => {});
         setReviews((prev) => [reviewObj, ...prev]);
       }
       return true;

@@ -431,22 +431,28 @@ const DEFAULT_SETTINGS = {
 };
 
 // Database helper functions (powered by Google Cloud Firebase Firestore with local cache)
-async function readDB() {
-  try {
-    // 1. Try to load live state from Google Cloud Firestore
-    const cloudData = await loadFromFirestore();
-    if (cloudData && cloudData.products && cloudData.products.length > 0) {
-      await fs.writeFile(DB_FILE, JSON.stringify(cloudData, null, 2), 'utf-8').catch(() => {});
-      return cloudData;
-    }
+let memoryCache: any = null;
+let firestoreSyncTimer: any = null;
 
-    // 2. Read local db.json
+// Database helper functions (backed by local db.json with debounced Firestore sync)
+async function readDB() {
+  if (memoryCache) {
+    return memoryCache;
+  }
+
+  try {
     const raw = await fs.readFile(DB_FILE, 'utf-8');
     const data = JSON.parse(raw);
+    data.products = data.products || [];
+    data.orders = data.orders || [];
     data.blacklist = data.blacklist || [];
     data.customerNotes = data.customerNotes || {};
-    // Seed to cloud in background
-    syncToFirestore(data).catch(() => {});
+    data.contacts = data.contacts || [];
+    data.reviews = data.reviews || [];
+    data.screenshotReviews = data.screenshotReviews || [];
+    data.settings = data.settings || DEFAULT_SETTINGS;
+    data.adminPasswordHash = data.adminPasswordHash || 'admin123';
+    memoryCache = data;
     return data;
   } catch {
     const initialData = {
@@ -456,21 +462,28 @@ async function readDB() {
       blacklist: [],
       customerNotes: {},
       settings: DEFAULT_SETTINGS,
-      adminPasswordHash: 'admin123'
+      adminPasswordHash: 'admin123',
+      reviews: [],
+      screenshotReviews: []
     };
     await fs.writeFile(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8').catch(() => {});
-    syncToFirestore(initialData).catch(() => {});
+    memoryCache = initialData;
     return initialData;
   }
 }
 
 async function writeDB(data: any) {
-  // Write to local file
+  memoryCache = data;
+  // Write to local file immediately
   await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), 'utf-8').catch(() => {});
-  // Sync permanently to Google Cloud Firestore
-  await syncToFirestore(data).catch((err) => {
-    console.error('[Firestore] Background sync error:', err?.message || err);
-  });
+
+  // Debounced permanent sync to Google Cloud Firestore (batches multiple edits into a single sync)
+  if (firestoreSyncTimer) clearTimeout(firestoreSyncTimer);
+  firestoreSyncTimer = setTimeout(() => {
+    syncToFirestore(data).catch((err) => {
+      console.warn('[Firestore] Background sync notice:', err?.message || err);
+    });
+  }, 4000);
 }
 
 // ----------------- FRAUD & RISK SCORING HELPER ----------------- //
