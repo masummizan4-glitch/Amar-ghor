@@ -6,7 +6,7 @@ import {
   Sliders, Sparkles, Layout, Globe, Type, MessageCircle, Phone, Search, FileText, 
   CreditCard, Bell, ChevronRight, ToggleLeft, ToggleRight, ShieldCheck,
   ShieldAlert, UserX, UserCheck, Users, Ban, Download, Filter, HelpCircle, Shield,
-  History, Star, PhoneCall, Link2, ExternalLink, Share2
+  History, Star, PhoneCall, Link2, ExternalLink, Share2, Key, Send
 } from 'lucide-react';
 import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile, CustomerReview, ScreenshotReview } from '../types';
 import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel, getProductShareUrl } from '../utils/formatters';
@@ -27,6 +27,14 @@ import {
   deleteReviewFromCloud,
   saveScreenshotReviewsToCloud
 } from '../lib/clientFirebase';
+import { 
+  subscribeAdminPush, 
+  unsubscribeAdminPush, 
+  isNotificationsEnabledLocally, 
+  isPushNotificationSupported, 
+  listenForegroundFCM 
+} from '../lib/fcmClient';
+import { VAPID_PUBLIC_KEY, isVapidKeyConfigured } from '../config/fcmConfig';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -82,6 +90,153 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [uploadingSsImage, setUploadingSsImage] = useState(false);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [adminCopiedProductId, setAdminCopiedProductId] = useState<string | null>(null);
+
+  // FCM Push Notifications State
+  const [pushSupported, setPushSupported] = useState<boolean>(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(false);
+  const [notificationLoading, setNotificationLoading] = useState<boolean>(false);
+  const [notificationMsg, setNotificationMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [customVapidKey, setCustomVapidKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('amarghor_custom_vapid_key') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showVapidModal, setShowVapidModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    isPushNotificationSupported().then(setPushSupported);
+    setNotificationsEnabled(isNotificationsEnabledLocally());
+  }, []);
+
+  useEffect(() => {
+    if (token) {
+      fetch('/api/admin/fcm-status', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && typeof data.enabled === 'boolean') {
+            setNotificationsEnabled(data.enabled && Notification.permission === 'granted');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const unsub = listenForegroundFCM((payload) => {
+      setNotificationMsg({
+        text: `${payload.title}: ${payload.body}`,
+        type: 'success'
+      });
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.4);
+        }
+      } catch {}
+      onRefreshProducts();
+    });
+    return () => unsub();
+  }, [token, onRefreshProducts]);
+
+  const handleToggleNotification = async () => {
+    if (!token) return;
+    setNotificationLoading(true);
+    setNotificationMsg(null);
+
+    try {
+      if (notificationsEnabled) {
+        const res = await unsubscribeAdminPush(token);
+        setNotificationsEnabled(false);
+        setNotificationMsg({ text: res.message, type: 'info' });
+      } else {
+        const effectiveKey = customVapidKey.trim() || VAPID_PUBLIC_KEY;
+        if (!effectiveKey || effectiveKey === 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER') {
+          setShowVapidModal(true);
+          setNotificationLoading(false);
+          return;
+        }
+
+        const res = await subscribeAdminPush(token, effectiveKey);
+        if (res.success) {
+          setNotificationsEnabled(true);
+          setNotificationMsg({ text: res.message, type: 'success' });
+        } else {
+          setNotificationMsg({ text: res.message, type: 'error' });
+          if (res.message.includes('VAPID')) {
+            setShowVapidModal(true);
+          }
+        }
+      }
+    } catch (err: any) {
+      setNotificationMsg({ text: err?.message || 'সমস্যা হয়েছে', type: 'error' });
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  const handleSaveCustomVapidKey = async (keyInput?: string) => {
+    const rawKey = typeof keyInput === 'string' ? keyInput : customVapidKey;
+    const cleanKey = (rawKey || '').trim();
+    if (!cleanKey) return;
+    try {
+      localStorage.setItem('amarghor_custom_vapid_key', cleanKey);
+      setCustomVapidKey(cleanKey);
+      setShowVapidModal(false);
+      setNotificationLoading(true);
+      const res = await subscribeAdminPush(token!, cleanKey);
+      if (res.success) {
+        setNotificationsEnabled(true);
+        setNotificationMsg({ text: res.message, type: 'success' });
+      } else {
+        setNotificationMsg({ text: res.message, type: 'error' });
+      }
+    } catch (err: any) {
+      setNotificationMsg({ text: err?.message || 'VAPID কি সংরক্ষণ ব্যর্থ হয়েছে', type: 'error' });
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (!token) return;
+    setNotificationLoading(true);
+    setNotificationMsg(null);
+    try {
+      const res = await fetch('/api/admin/fcm-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotificationMsg({ text: data.message, type: 'success' });
+      } else {
+        setNotificationMsg({ text: data.error || 'টেস্ট নোটিফিকেশন পাঠানো যায়নি', type: 'error' });
+      }
+    } catch (err: any) {
+      setNotificationMsg({ text: err.message || 'টেস্ট নোটিফিকেশন ব্যর্থ হয়েছে', type: 'error' });
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (reviews && reviews.length > 0) {
@@ -1217,6 +1372,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex items-center gap-2">
             {token && (
               <button
+                onClick={handleToggleNotification}
+                disabled={notificationLoading || !pushSupported}
+                title={
+                  notificationsEnabled
+                    ? 'পুশ নোটিফিকেশন সক্রিয় (ট্যাপ করে বন্ধ করুন)'
+                    : 'পুশ নোটিফিকেশন বন্ধ (ট্যাপ করে চালু করুন)'
+                }
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                  notificationsEnabled
+                    ? 'bg-amber-400 text-slate-900 font-bold hover:bg-amber-300'
+                    : 'bg-emerald-800/80 hover:bg-emerald-700 text-emerald-100 border border-emerald-600/50'
+                }`}
+              >
+                <Bell className={`w-3.5 h-3.5 ${notificationsEnabled ? 'fill-current animate-bounce' : ''}`} />
+                <span className="hidden sm:inline">
+                  {notificationLoading ? 'প্রসেসিং...' : notificationsEnabled ? 'নোটিফিকেশন অন' : 'নোটিফিকেশন অফ'}
+                </span>
+                <span className={`w-1.5 h-1.5 rounded-full ${notificationsEnabled ? 'bg-emerald-700' : 'bg-gray-400'}`} />
+              </button>
+            )}
+
+            {token && (
+              <button
                 onClick={handleLogout}
                 className="px-3 py-1.5 bg-red-800/80 hover:bg-red-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
               >
@@ -1369,6 +1547,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>সাইট সেটিংস ও সিকিউরিটি</span>
               </button>
             </div>
+
+            {/* Notification message toast/banner */}
+            {notificationMsg && (
+              <div className={`mx-4 sm:mx-6 mt-3 p-3 rounded-xl border flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in ${
+                notificationMsg.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 shrink-0" />
+                  <span>{notificationMsg.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotificationMsg(null)}
+                  className="p-1 hover:bg-black/5 rounded-md text-gray-500 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* Tab 1: Products Management */}
             {activeTab === 'products' && (
@@ -3443,6 +3642,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Tab: Store Settings */}
             {activeTab === 'settings' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* 🔔 Admin Push Notification Control Center */}
+                <div className="bg-gradient-to-br from-emerald-950 via-[#133E2B] to-emerald-900 text-white p-5 sm:p-6 rounded-3xl shadow-lg border border-emerald-700/50 space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-emerald-700/60">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0 border border-white/15">
+                        <Bell className="w-6 h-6 text-[#E8C547]" />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-extrabold text-base sm:text-lg text-white">
+                            অ্যাডমিন পুশ নোটিফিকেশন সিস্টেম (FCM Push)
+                          </h3>
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            notificationsEnabled 
+                              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/40' 
+                              : 'bg-white/10 text-gray-300 border-white/20'
+                          }`}>
+                            {notificationsEnabled ? '● নোটিফিকেশন সক্রিয়' : '○ নোটিফিকেশন বন্ধ'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-100/80 mt-1 leading-relaxed">
+                          নতুন কাস্টমার অর্ডার এবং ইনকোয়ারি আসলে তাৎক্ষণিক পুশ নোটিফিকেশন ও মিষ্টি অ্যালার্ট শব্দ বাজবে
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleToggleNotification}
+                        disabled={notificationLoading}
+                        className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer disabled:opacity-50 ${
+                          notificationsEnabled 
+                            ? 'bg-red-500/90 hover:bg-red-600 text-white border border-red-400/30' 
+                            : 'bg-[#E8C547] hover:bg-[#d8b537] text-gray-900'
+                        }`}
+                      >
+                        {notificationLoading ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : notificationsEnabled ? (
+                          <ToggleRight className="w-4 h-4" />
+                        ) : (
+                          <ToggleLeft className="w-4 h-4" />
+                        )}
+                        <span>{notificationsEnabled ? 'নোটিফিকেশন বন্ধ করুন' : 'নোটিফিকেশন চালু করুন'}</span>
+                      </button>
+
+                      {notificationsEnabled && (
+                        <button
+                          type="button"
+                          onClick={handleTestNotification}
+                          disabled={notificationLoading}
+                          className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+                        >
+                          <Send className="w-3.5 h-3.5 text-[#E8C547]" />
+                          <span>টেস্ট নোটিফিকেশন</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowVapidModal(true)}
+                        className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+                      >
+                        <Key className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>VAPID কী {isVapidKeyConfigured() ? '✓' : 'সেট করুন'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Security, Privacy & Reliability Guarantees */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1">
+                      <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>কাস্টমার প্রাইভেসি</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-100/70 leading-relaxed">
+                        নোটিফিকেশন বডিতে কাস্টমারের কোনো ফোন নম্বর বা ব্যক্তিগত ঠিকানা পাঠানো হয় না। সকল তথ্য কেবল সুরক্ষিত অ্যাডমিন প্যানেলে সংরক্ষিত।
+                      </p>
+                    </div>
+
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1">
+                      <div className="flex items-center gap-1.5 text-[#E8C547] font-bold">
+                        <Lock className="w-4 h-4" />
+                        <span>১০০% নিরাপদ অ্যাডমিন অ্যাক্সেস</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-100/70 leading-relaxed">
+                        সাধারণ ভিজিটর বা মোবাইল অ্যাপ ইনস্টল করা কোনো কাস্টমারের ডিভাইসে অর্ডার নোটিফিকেশন যাওয়ার কোনো সুযোগ নেই।
+                      </p>
+                    </div>
+
+                    <div className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1">
+                      <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>নিরবচ্ছিন্ন অর্ডার সুরক্ষানীতি</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-100/70 leading-relaxed">
+                        নেটওয়ার্ক বা নোটিফিকেশন সার্ভিস ফেইল করলেও কাস্টমারের অর্ডার নিশ্চিতভাবে সার্ভার ও ফায়ারবেসে সফলভাবে জমা হবে।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-2xl border border-[#E8E2D8] space-y-6">
                   {/* Top Bar Header & Action */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E8E2D8] pb-4">
@@ -5095,6 +5398,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* VAPID Public Key Config Modal */}
+      {showVapidModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E2D8] shadow-2xl p-6 space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-[#133E2B]">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-[#133E2B]">
+                    Web Push VAPID Public Key কনফিগারেশন
+                  </h4>
+                  <p className="text-[11px] text-gray-500">
+                    Firebase Console &gt; Project Settings &gt; Cloud Messaging থেকে সংগৃহীত
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVapidModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                ব্রাউজারে ফায়ারবেস পুশ নোটিফিকেশন সচল করতে আপনার Firebase প্রজেক্টের <strong>Web configuration &gt; Key pair (VAPID key)</strong> টি নিচে পেস্ট করুন:
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  VAPID Public Key
+                </label>
+                <textarea
+                  rows={3}
+                  value={customVapidKey}
+                  onChange={(e) => setCustomVapidKey(e.target.value)}
+                  placeholder="B..."
+                  className="w-full px-3 py-2 text-xs font-mono border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
+                />
+              </div>
+
+              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-[11px] text-emerald-800 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>এটি পাবলিক কী, কোনো গোপন চাবি নয়</span>
+                </p>
+                <p className="text-emerald-700/90 leading-relaxed">
+                  ব্রাউজারে নোটিফিকেশন টোকেন জেনারেট করার জন্য কেবল এই পাবলিক কীটি প্রয়োজন। কোনো প্রাইভেট সিক্রেট কী এখানে প্রয়োজন নেই।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E8E2D8]">
+              <button
+                type="button"
+                onClick={() => setShowVapidModal(false)}
+                className="px-4 py-2 border border-[#DDD5C7] text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 cursor-pointer"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveCustomVapidKey(customVapidKey)}
+                className="px-5 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl hover:bg-[#2D6A4F] shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>সংরক্ষণ করুন</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

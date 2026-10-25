@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore } from './src/lib/firestoreSync.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,8 +27,8 @@ app.get(['/manifest.webmanifest', '/manifest.json'], (_req, res) => {
   res.sendFile(manifestPath);
 });
 
-// Explicit Service Worker endpoint for PWA installability and WebAPK generation
-app.get(['/sw.js', '/service-worker.js'], (_req, res) => {
+// Explicit Service Worker endpoint for PWA installability and FCM Web Push
+app.get(['/sw.js', '/service-worker.js', '/firebase-messaging-sw.js'], (_req, res) => {
   const swPath = path.join(__dirname, 'public', 'sw.js');
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Service-Worker-Allowed', '/');
@@ -452,6 +454,7 @@ async function readDB() {
     data.screenshotReviews = data.screenshotReviews || [];
     data.settings = data.settings || DEFAULT_SETTINGS;
     data.adminPasswordHash = data.adminPasswordHash || 'admin123';
+    data.adminFcmTokens = Array.isArray(data.adminFcmTokens) ? data.adminFcmTokens : [];
     memoryCache = data;
     return data;
   } catch {
@@ -463,6 +466,7 @@ async function readDB() {
       customerNotes: {},
       settings: DEFAULT_SETTINGS,
       adminPasswordHash: 'admin123',
+      adminFcmTokens: [],
       reviews: [],
       screenshotReviews: []
     };
@@ -484,6 +488,105 @@ async function writeDB(data: any) {
       console.warn('[Firestore] Background sync notice:', err?.message || err);
     });
   }, 4000);
+}
+
+// ----------------- FIREBASE ADMIN PUSH NOTIFICATION DISPATCHER ----------------- //
+let fcmAdminInitialized = false;
+
+function ensureFirebaseAdmin(): boolean {
+  if (fcmAdminInitialized) return true;
+
+  try {
+    if (getApps().length > 0) {
+      fcmAdminInitialized = true;
+      return true;
+    }
+
+    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (serviceAccountKey) {
+      const parsed = typeof serviceAccountKey === 'string' ? JSON.parse(serviceAccountKey) : serviceAccountKey;
+      initializeApp({
+        credential: cert(parsed),
+        projectId: parsed.project_id || 'arched-outcome-4c70r'
+      });
+      fcmAdminInitialized = true;
+      console.log('[FCM Admin] Successfully initialized with service account key');
+      return true;
+    }
+
+    // Default application credentials (e.g. Google Cloud Run environment)
+    initializeApp({
+      projectId: 'arched-outcome-4c70r'
+    });
+    fcmAdminInitialized = true;
+    console.log('[FCM Admin] Initialized with Google Cloud runtime credentials');
+    return true;
+  } catch (err: any) {
+    console.warn('[FCM Admin] Initialization note:', err?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Dispatch Push Notification to all registered Admin devices
+ * Strictly non-blocking and safe: failures never affect orders
+ */
+async function sendAdminNotification(payload: { title: string; body: string; data?: Record<string, string> }) {
+  try {
+    const db = await readDB();
+    const tokens: string[] = Array.isArray(db.adminFcmTokens) ? db.adminFcmTokens : [];
+    if (tokens.length === 0) {
+      return;
+    }
+
+    const ready = ensureFirebaseAdmin();
+    if (!ready) {
+      console.log('[FCM Admin] Notification prepared, awaiting admin service account credentials');
+      return;
+    }
+
+    const messagePayload = {
+      notification: {
+        title: payload.title,
+        body: payload.body
+      },
+      data: {
+        ...(payload.data || {}),
+        url: payload.data?.url || '/?admin=true&tab=orders'
+      },
+      tokens
+    };
+
+    const response = await getMessaging().sendEachForMulticast(messagePayload);
+    console.log(`[FCM Admin] Sent ${response.successCount} of ${tokens.length} push notification(s)`);
+
+    // Clean up expired or unregistered tokens automatically
+    if (response.failureCount > 0) {
+      const validTokens: string[] = [];
+      response.responses.forEach((resp: any, idx: number) => {
+        if (resp.success) {
+          validTokens.push(tokens[idx]);
+        } else {
+          const errorCode = resp.error?.code;
+          if (
+            errorCode === 'messaging/invalid-registration-token' ||
+            errorCode === 'messaging/registration-token-not-registered'
+          ) {
+            console.log(`[FCM Admin] Pruning expired token: ${tokens[idx].slice(0, 16)}...`);
+          } else {
+            validTokens.push(tokens[idx]);
+          }
+        }
+      });
+
+      if (validTokens.length !== tokens.length) {
+        db.adminFcmTokens = validTokens;
+        await writeDB(db);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[FCM Admin] Push dispatch note (safely bypassed):', err?.message || err);
+  }
 }
 
 // ----------------- FRAUD & RISK SCORING HELPER ----------------- //
@@ -963,6 +1066,20 @@ app.post('/api/orders', async (req, res) => {
     db.orders.unshift(newOrder);
     await writeDB(db);
 
+    // Asynchronously dispatch Admin Push Notification (Non-blocking: safe from failure)
+    setImmediate(() => {
+      const count = newOrder.items?.length || 1;
+      sendAdminNotification({
+        title: '🛒 নতুন অর্ডার গ্রহণ করা হয়েছে!',
+        body: `অর্ডার #${orderNumber} | মোট: ৳${payableTotal} | ${count}টি পণ্য`,
+        data: {
+          url: '/?admin=true&tab=orders',
+          orderId: newOrder.orderId,
+          orderNumber: orderNumber
+        }
+      }).catch(() => {});
+    });
+
     res.json({
       success: true,
       order: newOrder,
@@ -1225,6 +1342,19 @@ app.post('/api/contact', async (req, res) => {
     db.contacts = db.contacts || [];
     db.contacts.unshift(contactMsg);
     await writeDB(db);
+
+    // Asynchronously dispatch Admin Push Notification for customer inquiry
+    setImmediate(() => {
+      sendAdminNotification({
+        title: '✉️ নতুন কাস্টমার অনুসন্ধান!',
+        body: `বার্তা: ${String(message || '').slice(0, 60)}...`,
+        data: {
+          url: '/?admin=true&tab=messages',
+          type: 'contact'
+        }
+      }).catch(() => {});
+    });
+
     res.json({ success: true, message: 'আপনার বার্তাটি সফলভাবে পাঠানো হয়েছে।' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1488,6 +1618,112 @@ app.post('/api/admin/change-password', async (req, res) => {
     db.adminPasswordHash = newPassword;
     await writeDB(db);
     res.json({ success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5.1 Admin FCM Push Notification Token Management
+app.post('/api/admin/fcm-token', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized: Admin authentication required' });
+    }
+
+    const { token } = req.body;
+    if (!token || typeof token !== 'string' || token.trim().length < 20) {
+      return res.status(400).json({ error: 'সঠিক ডিভাইস টোকেন পাওয়া যায়নি।' });
+    }
+
+    const cleanToken = token.trim();
+    const db = await readDB();
+    db.adminFcmTokens = Array.isArray(db.adminFcmTokens) ? db.adminFcmTokens : [];
+
+    if (!db.adminFcmTokens.includes(cleanToken)) {
+      db.adminFcmTokens.push(cleanToken);
+      await writeDB(db);
+      console.log(`[FCM Admin] Registered new admin device token. Total registered: ${db.adminFcmTokens.length}`);
+    }
+
+    res.json({
+      success: true,
+      message: 'ডিভাইস নোটিফিকেশন টোকেন সফলভাবে নিবন্ধিত হয়েছে।',
+      registeredDevices: db.adminFcmTokens.length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/fcm-token', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { token } = req.body;
+    const db = await readDB();
+    if (Array.isArray(db.adminFcmTokens) && token) {
+      db.adminFcmTokens = db.adminFcmTokens.filter((t: string) => t !== String(token).trim());
+      await writeDB(db);
+      console.log(`[FCM Admin] Unregistered admin device token. Remaining: ${db.adminFcmTokens.length}`);
+    }
+
+    res.json({ success: true, message: 'ডিভাইস নোটিফিকেশন টোকেন সরানো হয়েছে।' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/fcm-status', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const db = await readDB();
+    const tokens = Array.isArray(db.adminFcmTokens) ? db.adminFcmTokens : [];
+    res.json({
+      success: true,
+      enabled: tokens.length > 0,
+      registeredCount: tokens.length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/fcm-test', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const db = await readDB();
+    const tokens = Array.isArray(db.adminFcmTokens) ? db.adminFcmTokens : [];
+    if (tokens.length === 0) {
+      return res.status(400).json({
+        error: 'কোনো নিবন্ধিত ডিভাইস পাওয়া যায়নি। অনুগ্রহ করে প্রথমে নোটিফিকেশন সক্রিয় করুন।'
+      });
+    }
+
+    await sendAdminNotification({
+      title: '🔔 আমার ঘর Online - টেস্ট নোটিফিকেশন',
+      body: 'অভিনন্দন! আপনার পুশ নোটিফিকেশন সিস্টেম সফলভাবে সক্রিয় রয়েছে। নতুন অর্ডার আসলে তৎক্ষণাৎ সংকেত পাবেন।',
+      data: {
+        url: '/?admin=true&tab=orders',
+        type: 'test'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'টেস্ট নোটিফিকেশন পাঠানো হয়েছে। আপনার ডিভাইসে চেক করুন।'
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
