@@ -23,6 +23,7 @@ import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { PWAFloatingBanner } from './components/PWAInstallButton';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ShieldCheck, Truck, RefreshCw, Sparkles, Filter, Search, ArrowRight, X, Star, ShoppingBag } from 'lucide-react';
+import { showNativeAdminNotification, playOrderSound, triggerHapticFeedback } from './utils/notificationSound';
 import { isWeightBasedProduct, matchProductSearch, getDefaultProductWeight, formatPrice, toBnNumber, calculateItemPrice } from './utils/formatters';
 import { INITIAL_PRODUCTS } from './data/defaultProducts';
 import { INITIAL_REVIEWS, INITIAL_SCREENSHOT_REVIEWS } from './data/defaultReviews';
@@ -291,6 +292,57 @@ export default function App() {
       setLoadingProducts(false);
     }
   };
+
+  // Background Admin Order Monitor (Alerts Admin with chime and popup even when dashboard modal is closed)
+  useEffect(() => {
+    let isMounted = true;
+    let lastKnownOrdersCount = 0;
+    const knownIds = new Set<string>();
+
+    const checkAdminOrders = async () => {
+      try {
+        const adminToken = localStorage.getItem('amarghor_admin_token');
+        const notifEnabled = localStorage.getItem('amarghor_admin_notifications_enabled') !== 'false';
+        if (!adminToken || !notifEnabled) return;
+
+        const res = await fetch('/api/orders', {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        if (!res.ok) return;
+        const orders = await res.json();
+        if (Array.isArray(orders)) {
+          if (lastKnownOrdersCount > 0 && orders.length > lastKnownOrdersCount) {
+            const freshOnes = orders.filter((o: any) => !knownIds.has(o.orderId));
+            if (freshOnes.length > 0) {
+              const latest = freshOnes[0];
+              playOrderSound();
+              triggerHapticFeedback();
+              showNativeAdminNotification(
+                '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
+                `অর্ডার #${latest.orderNumber || ''} | মোট: ৳${latest.totalPayable || latest.payableTotal || latest.subtotal || ''}`
+              );
+            }
+          }
+          lastKnownOrdersCount = orders.length;
+          orders.forEach((o: any) => knownIds.add(o.orderId));
+        }
+      } catch {
+        // Silent catch for background check
+      }
+    };
+
+    // First check after 3 seconds, then every 10 seconds
+    const initialTimer = setTimeout(checkAdminOrders, 3000);
+    const interval = setInterval(() => {
+      if (isMounted) checkAdminOrders();
+    }, 10000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Handler for adding a new customer review
   const handleAddReview = async (newRev: Omit<CustomerReview, 'id' | 'createdAt'>): Promise<boolean> => {

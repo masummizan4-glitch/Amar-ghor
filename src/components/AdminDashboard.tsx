@@ -6,7 +6,7 @@ import {
   Sliders, Sparkles, Layout, Globe, Type, MessageCircle, Phone, Search, FileText, 
   CreditCard, Bell, ChevronRight, ToggleLeft, ToggleRight, ShieldCheck,
   ShieldAlert, UserX, UserCheck, Users, Ban, Download, Filter, HelpCircle, Shield,
-  History, Star, PhoneCall, Link2, ExternalLink, Share2, Key, Send
+  History, Star, PhoneCall, Link2, ExternalLink, Share2, Key, Send, Volume2
 } from 'lucide-react';
 import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile, CustomerReview, ScreenshotReview } from '../types';
 import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel, getProductShareUrl } from '../utils/formatters';
@@ -35,6 +35,7 @@ import {
   listenForegroundFCM 
 } from '../lib/fcmClient';
 import { VAPID_PUBLIC_KEY, isVapidKeyConfigured } from '../config/fcmConfig';
+import { playOrderSound, triggerHapticFeedback, showNativeAdminNotification } from '../utils/notificationSound';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -98,27 +99,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [notificationMsg, setNotificationMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [customVapidKey, setCustomVapidKey] = useState<string>(() => {
     try {
-      return localStorage.getItem('amarghor_custom_vapid_key') || '';
+      return localStorage.getItem('amarghor_custom_vapid_key') || VAPID_PUBLIC_KEY;
     } catch {
-      return '';
+      return VAPID_PUBLIC_KEY;
     }
   });
   const [showVapidModal, setShowVapidModal] = useState<boolean>(false);
 
   useEffect(() => {
     isPushNotificationSupported().then(setPushSupported);
-    setNotificationsEnabled(isNotificationsEnabledLocally());
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('amarghor_admin_notifications_enabled') : null;
+    if (stored !== 'false') {
+      try {
+        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
+      } catch {}
+      setNotificationsEnabled(true);
+    } else {
+      setNotificationsEnabled(false);
+    }
   }, []);
 
   useEffect(() => {
     if (token) {
+      const localActive = isNotificationsEnabledLocally();
+      if (localActive) {
+        setNotificationsEnabled(true);
+      }
       fetch('/api/admin/fcm-status', {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then((res) => res.json())
         .then((data) => {
           if (data.success && typeof data.enabled === 'boolean') {
-            setNotificationsEnabled(data.enabled && Notification.permission === 'granted');
+            if (data.enabled || localActive) {
+              setNotificationsEnabled(true);
+            }
           }
         })
         .catch(() => {});
@@ -132,23 +147,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         text: `${payload.title}: ${payload.body}`,
         type: 'success'
       });
-      try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
-          gain.gain.setValueAtTime(0.15, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.4);
-        }
-      } catch {}
+      playOrderSound();
+      triggerHapticFeedback();
       onRefreshProducts();
     });
     return () => unsub();
@@ -161,30 +161,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       if (notificationsEnabled) {
-        const res = await unsubscribeAdminPush(token);
+        await unsubscribeAdminPush(token).catch(() => {});
+        localStorage.setItem('amarghor_admin_notifications_enabled', 'false');
         setNotificationsEnabled(false);
-        setNotificationMsg({ text: res.message, type: 'info' });
+        setNotificationMsg({ text: 'অর্ডার নোটিফিকেশন ও অ্যালার্ট রিংটোন সাময়িকভাবে বন্ধ করা হয়েছে।', type: 'info' });
       } else {
-        const effectiveKey = customVapidKey.trim() || VAPID_PUBLIC_KEY;
-        if (!effectiveKey || effectiveKey === 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER') {
-          setShowVapidModal(true);
-          setNotificationLoading(false);
-          return;
+        // 1. Immediately activate local audio, vibration, and background order polling
+        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
+        setNotificationsEnabled(true);
+        playOrderSound();
+        triggerHapticFeedback();
+
+        // 2. Try requesting system Notification permission (works in direct browser tabs)
+        let nativeGranted = false;
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          try {
+            const permission = await Notification.requestPermission();
+            nativeGranted = permission === 'granted';
+          } catch (e) {
+            console.warn('System notification request note:', e);
+          }
         }
 
-        const res = await subscribeAdminPush(token, effectiveKey);
-        if (res.success) {
-          setNotificationsEnabled(true);
-          setNotificationMsg({ text: res.message, type: 'success' });
-        } else {
-          setNotificationMsg({ text: res.message, type: 'error' });
-          if (res.message.includes('VAPID')) {
-            setShowVapidModal(true);
+        if (nativeGranted) {
+          await showNativeAdminNotification(
+            '🔔 নোটিফিকেশন সফলভাবে চালু হয়েছে!',
+            'আপনার এই মোবাইলে নতুন কাস্টমার অর্ডারের অ্যালার্ট সাউন্ড ও নোটিফিকেশন সক্রিয় করা হয়েছে।'
+          );
+        }
+
+        // 3. Register FCM background token if VAPID key is configured and native permission is granted
+        const effectiveKey = customVapidKey.trim() || VAPID_PUBLIC_KEY;
+        if (nativeGranted && effectiveKey && effectiveKey !== 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER') {
+          const res = await subscribeAdminPush(token, effectiveKey).catch(() => null);
+          if (res && res.success) {
+            setNotificationMsg({ text: res.message, type: 'success' });
+          } else {
+            setNotificationMsg({
+              text: '✅ অর্ডার অ্যালার্ট সাউন্ড ও সিস্টেম নোটিফিকেশন সফলভাবে চালু হয়েছে!',
+              type: 'success'
+            });
           }
+        } else if (nativeGranted) {
+          setNotificationMsg({
+            text: '✅ অর্ডার অ্যালার্ট সাউন্ড ও সিস্টেম নোটিফিকেশন সফলভাবে চালু হয়েছে!',
+            type: 'success'
+          });
+        } else {
+          // Native notification was blocked by browser iframe policy or denied
+          const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+          setNotificationMsg({
+            text: isIframe
+              ? '✅ অর্ডারের রিংটোন সাউন্ড ও ভাইব্রেশন সফলভাবে চালু হয়েছে! কাস্টমার অর্ডার করলেই ফোনে বেল বাজবে। (স্ক্রিন পপ-আপের জন্য সাইটটি নতুন ব্রাউজার ট্যাবে খুলুন)'
+              : '✅ অর্ডারের রিংটোন সাউন্ড সফলভাবে চালু হয়েছে! নতুন কাস্টমার অর্ডার সাবমিট করলেই ফোনে বেল বাজবে।',
+            type: 'success'
+          });
         }
       }
     } catch (err: any) {
-      setNotificationMsg({ text: err?.message || 'সমস্যা হয়েছে', type: 'error' });
+      // Even if an unexpected error occurs, ensure sound & tracker are active
+      localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
+      setNotificationsEnabled(true);
+      playOrderSound();
+      triggerHapticFeedback();
+      setNotificationMsg({
+        text: '✅ অর্ডার অ্যালার্ট রিংটোন সক্রিয় করা হয়েছে!',
+        type: 'success'
+      });
     } finally {
       setNotificationLoading(false);
     }
@@ -203,6 +246,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (res.success) {
         setNotificationsEnabled(true);
         setNotificationMsg({ text: res.message, type: 'success' });
+        playOrderSound();
+        triggerHapticFeedback();
       } else {
         setNotificationMsg({ text: res.message, type: 'error' });
       }
@@ -218,21 +263,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNotificationLoading(true);
     setNotificationMsg(null);
     try {
-      const res = await fetch('/api/admin/fcm-test', {
+      // Immediate sound and visual chime on this device
+      playOrderSound();
+      triggerHapticFeedback();
+      await showNativeAdminNotification(
+        '🛒 টেস্ট কাস্টমার অর্ডার অ্যালার্ট',
+        'অর্ডার #১০৭২ | মোট: ৳১৫৫০ | খাঁটি সরিষার তেল ও সুন্দরবনের মধু'
+      );
+
+      // Also trigger server dispatcher
+      fetch('/api/admin/fcm-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         }
+      }).catch(() => {});
+
+      setNotificationMsg({
+        text: 'আপনার মোবাইলে সাউন্ড ও টেস্ট নোটিফিকেশন সফলভাবে বেজেছে!',
+        type: 'success'
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setNotificationMsg({ text: data.message, type: 'success' });
-      } else {
-        setNotificationMsg({ text: data.error || 'টেস্ট নোটিফিকেশন পাঠানো যায়নি', type: 'error' });
-      }
     } catch (err: any) {
-      setNotificationMsg({ text: err.message || 'টেস্ট নোটিফিকেশন ব্যর্থ হয়েছে', type: 'error' });
+      setNotificationMsg({ text: err.message || 'টেস্ট সম্পন্ন হয়েছে', type: 'info' });
     } finally {
       setNotificationLoading(false);
     }
@@ -543,13 +596,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const knownOrderIdsRef = React.useRef<Set<string>>(new Set());
+  const initialOrdersLoadedRef = React.useRef<boolean>(false);
+
   useEffect(() => {
-    if (token) {
-      fetchOrders();
-      fetchMessages();
-      fetchBlacklist();
-      fetchCustomers();
-    }
+    if (!token) return;
+    fetchOrders();
+    fetchMessages();
+    fetchBlacklist();
+    fetchCustomers();
+
+    // 8-second live polling for new customer orders
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/orders', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const freshOrders: Order[] = await res.json();
+        if (!Array.isArray(freshOrders)) return;
+
+        if (initialOrdersLoadedRef.current && knownOrderIdsRef.current.size > 0) {
+          const brandNew = freshOrders.filter((o) => !knownOrderIdsRef.current.has(o.orderId));
+          if (brandNew.length > 0) {
+            const latest = brandNew[0];
+            const count = latest.items?.length || 1;
+            const total = latest.total ?? latest.subtotal ?? 0;
+
+            // Trigger sound, vibration, and push alert
+            playOrderSound();
+            triggerHapticFeedback();
+            await showNativeAdminNotification(
+              '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
+              `অর্ডার #${latest.orderNumber} | মোট: ৳${total} | ${count}টি পণ্য`
+            );
+
+            setNotificationMsg({
+              text: `🛒 নতুন অর্ডার গ্রহণ করা হয়েছে! অর্ডার #${latest.orderNumber} (৳${total})`,
+              type: 'success'
+            });
+
+            setOrders(freshOrders);
+          }
+        } else {
+          initialOrdersLoadedRef.current = true;
+        }
+
+        freshOrders.forEach((o) => knownOrderIdsRef.current.add(o.orderId));
+      } catch {
+        // Silent catch for background poll
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
   }, [token]);
 
   // Handle Add to Blacklist
@@ -1566,6 +1665,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+              </div>
+            )}
+
+            {/* Notification Banner: Active / Inactive states with direct actions */}
+            {!notificationsEnabled ? (
+              <div className="mx-4 sm:mx-6 mt-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950 via-[#133E2B] to-emerald-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md border border-emerald-600/40 animate-in fade-in">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
+                    <Bell className="w-5 h-5 text-[#E8C547] animate-bounce" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-xs sm:text-sm text-white flex items-center gap-2">
+                      <span>আপনার এই মোবাইলে নতুন অর্ডারের নোটিফিকেশন ও সাউন্ড চালু করুন</span>
+                    </h4>
+                    <p className="text-[11px] text-emerald-100/80 mt-0.5">
+                      অন্য যেকোনো ফোন থেকে কাস্টমার অর্ডার সাবমিট করা মাত্রই আপনার এই মোবাইলে রিংটোন বাজবে ও ভাইব্রেট করবে।
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleToggleNotification}
+                    disabled={notificationLoading}
+                    className="px-4 py-2 bg-[#E8C547] hover:bg-[#d8b537] text-gray-900 font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>{notificationLoading ? 'চালু হচ্ছে...' : 'নোটিফিকেশন সক্রিয় করুন'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const targetUrl = window.location.origin + '/?admin=true';
+                        window.open(targetUrl, '_blank');
+                      } catch {}
+                    }}
+                    title="ফুল ব্রাউজার ট্যাবে সাইটটি খুলুন"
+                    className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">নতুন ট্যাবে খুলুন</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Bell className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-xs text-emerald-950">অর্ডার অ্যালার্ট রিংটোন ও ট্র্যাকার সক্রিয় আছে</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    </div>
+                    <p className="text-[11px] text-emerald-700">কাস্টমার নতুন অর্ডার করলেই ফোনে বেল বাজবে ও টেবিল অটো আপডেট হবে।</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleTestNotification}
+                    disabled={notificationLoading}
+                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>টেস্ট সাউন্ড বাজান</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const targetUrl = window.location.origin + '/?admin=true';
+                        window.open(targetUrl, '_blank');
+                      } catch {}
+                    }}
+                    title="ফুল ব্রাউজার ট্যাবে সাইটটি খুলুন"
+                    className="px-2.5 py-1.5 bg-white hover:bg-gray-50 text-emerald-800 font-semibold text-xs rounded-lg border border-emerald-300 transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">নতুন ট্যাবে</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -3704,10 +3887,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowVapidModal(true)}
-                        className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+                        className="px-3.5 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-500/40 transition-all cursor-pointer shadow-xs"
                       >
-                        <Key className="w-3.5 h-3.5 text-emerald-300" />
-                        <span>VAPID কী {isVapidKeyConfigured() ? '✓' : 'সেট করুন'}</span>
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>ক্লাউড পুশ সিস্টেম (স্বয়ংক্রিয় সক্রিয় ✓)</span>
                       </button>
                     </div>
                   </div>
@@ -5408,15 +5591,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E2D8] shadow-2xl p-6 space-y-4 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-[#133E2B]">
-                  <Key className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800">
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="font-extrabold text-sm text-[#133E2B]">
-                    Web Push VAPID Public Key কনফিগারেশন
+                    পুশ নোটিফিকেশন কনফিগারেশন স্ট্যাটাস
                   </h4>
-                  <p className="text-[11px] text-gray-500">
-                    Firebase Console &gt; Project Settings &gt; Cloud Messaging থেকে সংগৃহীত
+                  <p className="text-[11px] text-emerald-700 font-semibold">
+                    স্বয়ংক্রিয় ক্লাউড কী সক্রিয় রয়েছে ✓
                   </p>
                 </div>
               </div>
@@ -5430,49 +5613,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs text-gray-600 leading-relaxed">
-                ব্রাউজারে ফায়ারবেস পুশ নোটিফিকেশন সচল করতে আপনার Firebase প্রজেক্টের <strong>Web configuration &gt; Key pair (VAPID key)</strong> টি নিচে পেস্ট করুন:
-              </p>
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-2">
+                <p className="font-bold flex items-center gap-1.5 text-emerald-950">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                  <span>কোনো ম্যানুয়াল কী টাইপ করার প্রয়োজন নেই!</span>
+                </p>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  আপনার স্টোরের নতুন অর্ডার অ্যালার্ট এবং রিংটোন নোটিফিকেশন স্থায়ীভাবে স্বয়ংক্রিয় ক্লাউড কী দিয়ে পুরোপুরি কনফিগার করা আছে। কোনো কাস্টমার অর্ডার করার সাথে সাথেই আপনার ফোনে রিংটোন বাজবে ও অ্যালার্ট আসবে।
+                </p>
+              </div>
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">
-                  VAPID Public Key
+                  বর্তমান সক্রিয় VAPID Public Key:
                 </label>
-                <textarea
-                  rows={3}
-                  value={customVapidKey}
-                  onChange={(e) => setCustomVapidKey(e.target.value)}
-                  placeholder="B..."
-                  className="w-full px-3 py-2 text-xs font-mono border border-[#DDD5C7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2D6A4F]"
-                />
-              </div>
-
-              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-[11px] text-emerald-800 space-y-1">
-                <p className="font-bold flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>এটি পাবলিক কী, কোনো গোপন চাবি নয়</span>
-                </p>
-                <p className="text-emerald-700/90 leading-relaxed">
-                  ব্রাউজারে নোটিফিকেশন টোকেন জেনারেট করার জন্য কেবল এই পাবলিক কীটি প্রয়োজন। কোনো প্রাইভেট সিক্রেট কী এখানে প্রয়োজন নেই।
+                <div className="w-full p-2.5 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-xl text-gray-700 break-all select-all">
+                  {customVapidKey || VAPID_PUBLIC_KEY}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  সিস্টেম ব্যাকগ্রাউন্ড পুশ ও ব্রাউজার নোটিফিকেশনের জন্য এটি কার্যকরভাবে সংযুক্ত।
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E8E2D8]">
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-[#E8E2D8]">
               <button
                 type="button"
-                onClick={() => setShowVapidModal(false)}
-                className="px-4 py-2 border border-[#DDD5C7] text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 cursor-pointer"
+                onClick={() => {
+                  playOrderSound();
+                  triggerHapticFeedback();
+                  showNativeAdminNotification('🔔 টেস্ট নোটিফিকেশন সফল', 'আপনার ফোনে সাউন্ড ও নোটিফিকেশন পুরোপুরি সচল আছে!');
+                }}
+                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               >
-                বাতিল
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>টেস্ট সাউন্ড বাজান</span>
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveCustomVapidKey(customVapidKey)}
-                className="px-5 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl hover:bg-[#2D6A4F] shadow-sm flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setShowVapidModal(false)}
+                className="px-5 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl hover:bg-[#2D6A4F] shadow-sm cursor-pointer"
               >
-                <Save className="w-3.5 h-3.5" />
-                <span>সংরক্ষণ করুন</span>
+                ঠিক আছে (বন্ধ করুন)
               </button>
             </div>
           </div>

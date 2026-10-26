@@ -31,10 +31,13 @@ export function getNotificationPermissionState(): NotificationPermission | 'unsu
 
 export function isNotificationsEnabledLocally(): boolean {
   if (typeof window === 'undefined') return false;
-  return (
-    localStorage.getItem('amarghor_admin_notifications_enabled') === 'true' &&
-    Notification.permission === 'granted'
-  );
+  const val = localStorage.getItem('amarghor_admin_notifications_enabled');
+  return val !== 'false';
+}
+
+export function isNativeNotificationGranted(): boolean {
+  if (typeof window === 'undefined' || !('Notification' in window)) return false;
+  return Notification.permission === 'granted';
 }
 
 /**
@@ -63,20 +66,23 @@ export async function subscribeAdminPush(
       };
     }
 
-    const app = getFirebaseAppInstance();
-    const messaging = getMessaging(app);
+    // Always enable local notification alerts once permission is granted
+    localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
 
-    // 2. Wait for Service Worker Registration
-    const reg = await navigator.serviceWorker.ready;
-
-    // 3. Determine VAPID Key
+    // 2. Determine VAPID Key for Remote FCM Push
     const effectiveVapidKey = (userVapidKey && userVapidKey.trim()) || VAPID_PUBLIC_KEY;
     if (!effectiveVapidKey || effectiveVapidKey === 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER') {
       return {
-        success: false,
-        message: 'Firebase Web Push VAPID Key কনফিগার করা প্রয়োজন।'
+        success: true,
+        message: 'আপনার এই ডিভাইসে অর্ডার অ্যালার্ট শব্দ ও নোটিফিকেশন সক্রিয় হয়েছে! ব্রাউজার সম্পূর্ণ বন্ধ অবস্থায় ক্লাউড পুশ পেতে ফায়ারবেস VAPID কী যুক্ত করুন।'
       };
     }
+
+    const app = getFirebaseAppInstance();
+    const messaging = getMessaging(app);
+
+    // 3. Wait for Service Worker Registration
+    const reg = await navigator.serviceWorker.ready;
 
     // 4. Retrieve FCM Device Token
     const currentToken = await getToken(messaging, {

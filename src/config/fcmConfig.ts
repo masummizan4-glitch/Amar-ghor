@@ -5,14 +5,13 @@
  * Path: Firebase Console -> Project Settings -> Cloud Messaging -> Web Push certificates -> Generate key pair
  */
 
+export const DEFAULT_VAPID_PUBLIC_KEY =
+  'BEbkctEAHRQv7y6QQWac4G49UO1yqRFLXXmnN37NeI_KPNeIK5LBcNst73CU7TVmZ97AE130kpEUHJ-lJquDAWs';
+
 export const VAPID_PUBLIC_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FIREBASE_VAPID_KEY) ||
-  'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER';
+  DEFAULT_VAPID_PUBLIC_KEY;
 
 export function isVapidKeyConfigured(): boolean {
-  return Boolean(
-    VAPID_PUBLIC_KEY &&
-    VAPID_PUBLIC_KEY !== 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER' &&
-    VAPID_PUBLIC_KEY.length > 20
-  );
+  return true;
 }

@@ -1843,7 +1843,7 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 // Start server with Vite middleware in development or static dist in production
 async function startServer() {
   const hasDist = existsSync(path.join(__dirname, 'dist', 'index.html'));
-  const isProd = process.env.NODE_ENV === 'production' || (process.env.npm_lifecycle_event === 'start' && hasDist);
+  const isProd = process.env.NODE_ENV === 'production' || hasDist;
 
   // Helper to serve SEO-optimized HTML for product landing pages (OpenGraph social share preview)
   const serveProductLandingHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
@@ -1860,7 +1860,7 @@ async function startServer() {
         product = DEFAULT_PRODUCTS.find((p) => p.id === prodId);
       }
 
-      const indexPath = isProd ? path.join(__dirname, 'dist', 'index.html') : path.join(__dirname, 'index.html');
+      const indexPath = (isProd && hasDist) ? path.join(__dirname, 'dist', 'index.html') : path.join(__dirname, 'index.html');
       let html = await fs.readFile(indexPath, 'utf-8');
 
       if (product) {
@@ -1897,56 +1897,34 @@ async function startServer() {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(html);
     } catch (err) {
-      if (isProd) {
-        return res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-      } else if (viteInstance) {
-        try {
-          const raw = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
-          const transformed = await viteInstance.transformIndexHtml(req.originalUrl, raw);
-          res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          return res.send(transformed);
-        } catch {
-          return res.sendFile(path.join(__dirname, 'index.html'));
+      try {
+        if (isProd && hasDist) {
+          return res.sendFile(path.join(__dirname, 'dist', 'index.html'));
         }
-      } else {
         return res.sendFile(path.join(__dirname, 'index.html'));
+      } catch {
+        return res.status(200).send('<!DOCTYPE html><html><head><title>আমার ঘর Online</title></head><body><div id="root"></div></body></html>');
       }
     }
   };
 
   const httpServer = http.createServer(app);
 
-  if (!isProd) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: { server: httpServer },
-      },
-      appType: 'spa'
-    });
-    // Support product landing URLs with dynamic SEO previews in dev
-    app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res, vite));
-    app.get('/', (req, res, next) => {
-      if (req.query.product) {
-        (req.params as any).id = String(req.query.product);
-        return serveProductLandingHtml(req, res, vite);
-      }
-      next();
-    });
-    app.use(vite.middlewares);
-    app.get('*', async (req, res, next) => {
-      try {
-        const raw = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
-        const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.send(transformed);
-      } catch (e) {
-        next(e);
-      }
-    });
-  } else {
-    // Support product landing URLs with dynamic SEO previews in prod
+  // Bind port immediately so Cloud Run health check passes instantly without waiting for Vite
+  const server = httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`Amar Ghor Online server running in ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'} mode at http://0.0.0.0:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${PORT} is already in use.`);
+    } else {
+      console.error('[Server] Listen error:', err);
+    }
+  });
+
+  if (isProd && hasDist) {
+    // Production: serve built static files and pre-rendered pages
     app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res));
     app.get('/', (req, res, next) => {
       if (req.query.product) {
@@ -1960,11 +1938,46 @@ async function startServer() {
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  } else {
+    // Development mode with Vite middleware
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: { server: httpServer },
+        },
+        appType: 'spa'
+      });
+      // Support product landing URLs with dynamic SEO previews in dev
+      app.get(['/product/:id', '/p/:id'], (req, res) => serveProductLandingHtml(req, res, vite));
+      app.get('/', (req, res, next) => {
+        if (req.query.product) {
+          (req.params as any).id = String(req.query.product);
+          return serveProductLandingHtml(req, res, vite);
+        }
+        next();
+      });
+      app.use(vite.middlewares);
+      app.get('*', async (req, res, next) => {
+        try {
+          const raw = await fs.readFile(path.join(__dirname, 'index.html'), 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.send(transformed);
+        } catch (e) {
+          next(e);
+        }
+      });
+    } catch (viteInitErr) {
+      console.warn('[Server] Vite middleware fallback to static dist:', viteInitErr);
+      const distPath = path.join(__dirname, 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
-
-  const server = httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Amar Ghor Online server running in ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'} mode at http://0.0.0.0:${PORT}`);
-  });
 
   process.on('SIGTERM', () => {
     console.log('SIGTERM received: closing HTTP server gracefully');
