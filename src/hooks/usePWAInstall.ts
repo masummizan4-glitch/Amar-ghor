@@ -14,7 +14,14 @@ export function usePWAInstall() {
   });
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  const [isInIframe, setIsInIframe] = useState(false);
+  const [isInIframe, setIsInIframe] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  });
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
 
   useEffect(() => {
@@ -33,7 +40,7 @@ export function usePWAInstall() {
     const inApp = /fban|fbav|instagram|messenger|line|micromessenger|wechat/i.test(userAgent);
     setIsInAppBrowser(inApp);
 
-    // Detect whether page is running inside an iframe
+    // Check iframe status
     try {
       setIsInIframe(window.self !== window.top);
     } catch {
@@ -80,12 +87,33 @@ export function usePWAInstall() {
   }, []);
 
   const install = async (): Promise<boolean> => {
-    const promptEvent = deferredPrompt || (typeof window !== 'undefined' ? (window as any).__pwaDeferredPrompt : null);
+    let promptEvent = deferredPrompt || (typeof window !== 'undefined' ? (window as any).__pwaDeferredPrompt : null);
+
+    // If on a direct top-level tab and prompt is still loading, wait up to 1.5s
+    if (!promptEvent && typeof window !== 'undefined' && !isInIframe && !isIOS) {
+      promptEvent = await new Promise<any>((resolve) => {
+        let timer: any;
+        const onReady = () => {
+          clearTimeout(timer);
+          window.removeEventListener('pwa-deferred-prompt-ready', onReady);
+          window.removeEventListener('beforeinstallprompt', onReady);
+          resolve((window as any).__pwaDeferredPrompt || null);
+        };
+        window.addEventListener('pwa-deferred-prompt-ready', onReady, { once: true });
+        window.addEventListener('beforeinstallprompt', onReady, { once: true });
+        timer = setTimeout(() => {
+          window.removeEventListener('pwa-deferred-prompt-ready', onReady);
+          window.removeEventListener('beforeinstallprompt', onReady);
+          resolve((window as any).__pwaDeferredPrompt || null);
+        }, 1500);
+      });
+    }
+
     if (!promptEvent) return false;
     try {
       await promptEvent.prompt();
-      const { outcome } = await promptEvent.userChoice;
-      if (outcome === 'accepted') {
+      const choice = await promptEvent.userChoice;
+      if (choice && choice.outcome === 'accepted') {
         setIsInstalled(true);
         setDeferredPrompt(null);
         if (typeof window !== 'undefined') {

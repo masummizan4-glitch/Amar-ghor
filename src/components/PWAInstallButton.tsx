@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, Share2, PlusSquare, Check, X, ShieldCheck, Sparkles, ExternalLink, Globe } from 'lucide-react';
+import { Download, Smartphone, Share2, PlusSquare, Check, X, ShieldCheck, Sparkles, ExternalLink } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Language } from '../types';
 
@@ -9,12 +9,14 @@ interface PWAInstallProps {
   onInstalled?: () => void;
 }
 
+const DIRECT_STORE_URL = 'https://ais-pre-gbnhtenxaui7tam4bmt64b-375809004900.asia-southeast1.run.app';
+
 export const PWAInstallButton: React.FC<PWAInstallProps> = ({
   lang = 'bn',
   variant = 'header',
   onInstalled,
 }) => {
-  const { isInstallable, isInstalled, isIOS, isInAppBrowser, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, isInIframe, isInAppBrowser, install } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -26,8 +28,14 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
 
   const handleInstallClick = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setInstalling(true);
+    
+    // If inside Google AI Studio editor preview frame, show guide to open direct site
+    if (isInIframe) {
+      setShowGuideModal(true);
+      return;
+    }
 
+    setInstalling(true);
     const hasPrompt = isInstallable || (typeof window !== 'undefined' && !!(window as any).__pwaDeferredPrompt);
     if (hasPrompt) {
       try {
@@ -81,6 +89,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
           <InstallGuideModal
             lang={lang}
             isIOS={isIOS}
+            isInIframe={isInIframe}
             isInAppBrowser={isInAppBrowser}
             onClose={() => setShowGuideModal(false)}
           />
@@ -106,6 +115,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
           <InstallGuideModal
             lang={lang}
             isIOS={isIOS}
+            isInIframe={isInIframe}
             isInAppBrowser={isInAppBrowser}
             onClose={() => setShowGuideModal(false)}
           />
@@ -141,6 +151,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
         <InstallGuideModal
           lang={lang}
           isIOS={isIOS}
+          isInIframe={isInIframe}
           isInAppBrowser={isInAppBrowser}
           onClose={() => setShowGuideModal(false)}
         />
@@ -151,7 +162,7 @@ export const PWAInstallButton: React.FC<PWAInstallProps> = ({
 
 // Clean, elegant floating install banner on mobile with 1-tap direct installation
 export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }) => {
-  const { isInstallable, isInstalled, isIOS, isInAppBrowser, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, isInIframe, isInAppBrowser, install } = usePWAInstall();
   const [dismissed, setDismissed] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -177,11 +188,17 @@ export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }
 
   const handleInstallClick = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setInstalling(true);
 
+    // If inside Google AI Studio editor preview frame, open the direct link or show the guide
+    if (isInIframe) {
+      setShowGuideModal(true);
+      return;
+    }
+
+    setInstalling(true);
     const hasPrompt = isInstallable || (typeof window !== 'undefined' && !!(window as any).__pwaDeferredPrompt);
     
-    // Direct 1-tap install on Android Chrome
+    // Direct 1-tap install on Android Chrome (when on direct URL)
     if (hasPrompt) {
       try {
         const ok = await install();
@@ -265,6 +282,7 @@ export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }
         <InstallGuideModal
           lang={lang}
           isIOS={isIOS}
+          isInIframe={isInIframe}
           isInAppBrowser={isInAppBrowser}
           onClose={() => setShowGuideModal(false)}
         />
@@ -273,22 +291,22 @@ export const PWAFloatingBanner: React.FC<{ lang?: Language }> = ({ lang = 'bn' }
   );
 };
 
-// Customer-friendly, minimal installation guide sheet (only shown when browser doesn't allow automatic prompt, like iOS Safari)
+// Installation guide sheet with clear distinction between editor iframe, iOS Safari, and real browser
 export const InstallGuideModal: React.FC<{
   lang: Language;
   isIOS: boolean;
+  isInIframe?: boolean;
   isInAppBrowser?: boolean;
   onClose: () => void;
 }> = ({
   lang,
   isIOS,
+  isInIframe = false,
   isInAppBrowser = false,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
-  const directUrl = typeof window !== 'undefined'
-    ? (window.location.origin || window.location.href)
-    : 'https://ais-pre-gbnhtenxaui7tam4bmt64b-375809004900.asia-southeast1.run.app';
+  const directUrl = DIRECT_STORE_URL;
 
   const handleCopyLink = async () => {
     try {
@@ -319,7 +337,7 @@ export const InstallGuideModal: React.FC<{
                 {lang === 'bn' ? "'আমার ঘর' অ্যাপ ইনস্টল" : "Install 'Amar Ghor' App"}
               </h4>
               <p className="text-[11px] text-gray-500 font-medium">
-                {isIOS ? 'iPhone / iPad (Safari)' : 'Android (Google Chrome)'}
+                {isInIframe ? 'গুগল ক্রোম ব্রাউজার' : isIOS ? 'iPhone / iPad (Safari)' : 'Android (Google Chrome)'}
               </p>
             </div>
           </div>
@@ -331,8 +349,56 @@ export const InstallGuideModal: React.FC<{
           </button>
         </div>
 
-        {/* If opened inside Facebook/Messenger in-app browser */}
-        {isInAppBrowser ? (
+        {/* Case 1: Inside Google AI Studio editor preview frame (the exact reason for Screenshot 1 & 2!) */}
+        {isInIframe ? (
+          <div className="space-y-3">
+            <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-300 space-y-2 text-left">
+              <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-xs">
+                <Sparkles className="w-4 h-4 text-[#133E2B]" />
+                <span>সরাসরি ১-ক্লিকে ইনস্টল করার সঠিক পদ্ধতি</span>
+              </div>
+              <p className="text-[11px] text-gray-700 leading-relaxed">
+                {lang === 'bn'
+                  ? "আপনি বর্তমানে গুগল এআই স্টুডিও এডিটর স্ক্রিনের ভেতর আছেন (উপরে studio.google.com দেখাচ্ছে)। এডিটর স্ক্রিনের ৩-ডটে চাপ দিলে গুগল স্টুডিও শর্টকাট হয়ে যায়।"
+                  : "You are currently previewing inside Google AI Studio editor."}
+              </p>
+              <p className="text-[11px] text-emerald-900 font-extrabold leading-relaxed">
+                {lang === 'bn'
+                  ? "আসল 'আমার ঘর' অ্যাপটি সরাসরি ১-ক্লিকে ফোনে নামাতে নিচের বাটনে চাপ দিন:"
+                  : "Tap below to open in Google Chrome directly and install in 1 tap:"}
+              </p>
+            </div>
+
+            <a
+              href={directUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 px-4 bg-[#133E2B] hover:bg-[#1B4332] active:scale-95 text-white font-extrabold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-md transition-all text-center cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4 text-[#E8C547]" />
+              <span>{lang === 'bn' ? 'ক্রোম ব্রাউজারে আসল ওয়েবসাইট খুলুন' : 'Open in Google Chrome'}</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="w-full py-2 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">{lang === 'bn' ? 'লিংক কপি হয়েছে!' : 'Link Copied!'}</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-3.5 h-3.5 text-gray-600" />
+                  <span>{lang === 'bn' ? 'ওয়েবসাইট লিংক কপি করুন' : 'Copy Website Link'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        ) : isInAppBrowser ? (
+          /* Case 2: Inside Facebook/Messenger in-app browser */
           <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
             <p className="text-xs font-bold text-amber-900">
               {lang === 'bn'
@@ -350,7 +416,7 @@ export const InstallGuideModal: React.FC<{
             </a>
           </div>
         ) : isIOS ? (
-          // iPhone / Safari 2-step easy instructions
+          /* Case 3: iPhone / Safari 2-step easy instructions */
           <div className="space-y-2.5 text-xs text-gray-700">
             <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#E8E2D8] flex items-start gap-3">
               <span className="w-6 h-6 rounded-full bg-[#133E2B] text-white font-black flex items-center justify-center text-xs shrink-0 mt-0.5">১</span>
@@ -380,7 +446,7 @@ export const InstallGuideModal: React.FC<{
             </div>
           </div>
         ) : (
-          // Android Chrome 2-step easy instructions (if auto-prompt was dismissed earlier)
+          /* Case 4: Android Chrome Top-Level fallback */
           <div className="space-y-2.5 text-xs text-gray-700">
             <div className="p-3 bg-[#FAF8F5] rounded-2xl border border-[#E8E2D8] flex items-start gap-3">
               <span className="w-6 h-6 rounded-full bg-[#133E2B] text-white font-black flex items-center justify-center text-xs shrink-0 mt-0.5">১</span>
