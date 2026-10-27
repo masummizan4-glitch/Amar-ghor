@@ -29,10 +29,13 @@ import {
   listenToCloudOrders
 } from '../lib/clientFirebase';
 import { 
-  subscribeAdminPush, 
-  unsubscribeAdminPush, 
+  subscribeAdminToWebPush, 
+  unsubscribeAdminFromWebPush, 
+  sendTestWebPush, 
+  isPushSupported 
+} from '../lib/webPushClient';
+import { 
   isNotificationsEnabledLocally, 
-  isPushNotificationSupported, 
   listenForegroundFCM 
 } from '../lib/fcmClient';
 import { VAPID_PUBLIC_KEY, isVapidKeyConfigured } from '../config/fcmConfig';
@@ -109,7 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [telegramTestMsg, setTelegramTestMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    isPushNotificationSupported().then(setPushSupported);
+    setPushSupported(isPushSupported());
     const stored = typeof window !== 'undefined' ? localStorage.getItem('amarghor_admin_notifications_enabled') : null;
     if (stored !== 'false') {
       try {
@@ -127,7 +130,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (localActive) {
         setNotificationsEnabled(true);
       }
-      fetch('/api/admin/fcm-status', {
+      fetch('/api/admin/push-status', {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then((res) => res.json())
@@ -163,71 +166,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       if (notificationsEnabled) {
-        await unsubscribeAdminPush(token).catch(() => {});
+        await unsubscribeAdminFromWebPush(token).catch(() => {});
         localStorage.setItem('amarghor_admin_notifications_enabled', 'false');
         setNotificationsEnabled(false);
-        setNotificationMsg({ text: 'অর্ডার নোটিফিকেশন ও অ্যালার্ট রিংটোন সাময়িকভাবে বন্ধ করা হয়েছে।', type: 'info' });
+        setNotificationMsg({ text: 'অর্ডার নোটিফিকেশন সাময়িকভাবে বন্ধ করা হয়েছে।', type: 'info' });
       } else {
-        // 1. Immediately activate local audio, vibration, and background order polling
-        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
-        setNotificationsEnabled(true);
+        // 1. Play immediate audio & haptic test
         playOrderSound();
         triggerHapticFeedback();
+        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
+        setNotificationsEnabled(true);
 
-        // 2. Try requesting system Notification permission (works in direct browser tabs)
-        let nativeGranted = false;
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          try {
-            const permission = await Notification.requestPermission();
-            nativeGranted = permission === 'granted';
-          } catch (e) {
-            console.warn('System notification request note:', e);
-          }
-        }
-
-        if (nativeGranted) {
-          await showNativeAdminNotification(
-            '🔔 নোটিফিকেশন সফলভাবে চালু হয়েছে!',
-            'আপনার এই মোবাইলে নতুন কাস্টমার অর্ডারের অ্যালার্ট সাউন্ড ও নোটিফিকেশন সক্রিয় করা হয়েছে।'
-          );
-        }
-
-        // 3. Register FCM background token if VAPID key is configured and native permission is granted
-        const effectiveKey = customVapidKey.trim() || VAPID_PUBLIC_KEY;
-        if (nativeGranted && effectiveKey && effectiveKey !== 'YOUR_VAPID_PUBLIC_KEY_PLACEHOLDER') {
-          const res = await subscribeAdminPush(token, effectiveKey).catch(() => null);
-          if (res && res.success) {
-            setNotificationMsg({ text: res.message, type: 'success' });
-          } else {
-            setNotificationMsg({
-              text: '✅ অর্ডার অ্যালার্ট সাউন্ড ও সিস্টেম নোটিফিকেশন সফলভাবে চালু হয়েছে!',
-              type: 'success'
-            });
-          }
-        } else if (nativeGranted) {
+        // 2. Request browser permission and register W3C Web Push in Service Worker
+        const res = await subscribeAdminToWebPush(token);
+        if (res.success) {
           setNotificationMsg({
-            text: '✅ অর্ডার অ্যালার্ট সাউন্ড ও সিস্টেম নোটিফিকেশন সফলভাবে চালু হয়েছে!',
+            text: res.message,
             type: 'success'
           });
         } else {
-          // Native notification was blocked by browser iframe policy or denied
           const isIframe = typeof window !== 'undefined' && window.self !== window.top;
           setNotificationMsg({
             text: isIframe
-              ? '✅ অর্ডারের রিংটোন সাউন্ড ও ভাইব্রেশন সফলভাবে চালু হয়েছে! কাস্টমার অর্ডার করলেই ফোনে বেল বাজবে। (স্ক্রিন পপ-আপের জন্য সাইটটি নতুন ব্রাউজার ট্যাবে খুলুন)'
-              : '✅ অর্ডারের রিংটোন সাউন্ড সফলভাবে চালু হয়েছে! নতুন কাস্টমার অর্ডার সাবমিট করলেই ফোনে বেল বাজবে।',
-            type: 'success'
+              ? '✅ সাউন্ড সক্রিয় হয়েছে! অ্যাপ/ওয়েবসাইট বন্ধ অবস্থায় ব্যাকগ্রাউন্ড নোটিফিকেশন পেতে সাইটটি গুগল ক্রোমে সরাসরি খুলুন।'
+              : res.message,
+            type: res.success ? 'success' : 'info'
           });
         }
       }
     } catch (err: any) {
-      // Even if an unexpected error occurs, ensure sound & tracker are active
       localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
       setNotificationsEnabled(true);
       playOrderSound();
       triggerHapticFeedback();
       setNotificationMsg({
-        text: '✅ অর্ডার অ্যালার্ট রিংটোন সক্রিয় করা হয়েছে!',
+        text: '✅ অর্ডার অ্যালার্ট সাউন্ড সক্রিয় করা হয়েছে!',
         type: 'success'
       });
     } finally {
@@ -243,7 +216,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       localStorage.setItem('amarghor_custom_vapid_key', cleanKey);
       setCustomVapidKey(cleanKey);
       setNotificationLoading(true);
-      const res = await subscribeAdminPush(token!, cleanKey);
+      const res = await subscribeAdminToWebPush(token!);
       if (res.success) {
         setNotificationsEnabled(true);
         setNotificationMsg({ text: res.message, type: 'success' });
@@ -267,24 +240,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Immediate sound and visual chime on this device
       playOrderSound();
       triggerHapticFeedback();
-      await showNativeAdminNotification(
-        '🛒 টেস্ট কাস্টমার অর্ডার অ্যালার্ট',
-        'অর্ডার #১০৭২ | মোট: ৳১৫৫০ | খাঁটি সরিষার তেল ও সুন্দরবনের মধু'
-      );
 
-      // Also trigger server dispatcher
-      fetch('/api/admin/fcm-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      }).catch(() => {});
-
-      setNotificationMsg({
-        text: 'আপনার মোবাইলে সাউন্ড ও টেস্ট নোটিফিকেশন সফলভাবে বেজেছে!',
-        type: 'success'
-      });
+      // Trigger server-side background web push test
+      const pushRes = await sendTestWebPush(token);
+      if (pushRes.success) {
+        setNotificationMsg({
+          text: `✅ ${pushRes.message}`,
+          type: 'success'
+        });
+      } else {
+        await showNativeAdminNotification(
+          '🛒 টেস্ট কাস্টমার অর্ডার অ্যালার্ট',
+          'অর্ডার #১০৭২ | মোট: ৳১৫৫০ | খাঁটি সরিষার তেল ও সুন্দরবনের মধু'
+        );
+        setNotificationMsg({
+          text: 'আপনার মোবাইলে সাউন্ড ও টেস্ট নোটিফিকেশন সফলভাবে বেজেছে!',
+          type: 'success'
+        });
+      }
     } catch (err: any) {
       setNotificationMsg({ text: err.message || 'টেস্ট সম্পন্ন হয়েছে', type: 'info' });
     } finally {
@@ -1810,10 +1783,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-xs text-emerald-950">অর্ডার অ্যালার্ট রিংটোন ও ট্র্যাকার সক্রিয় আছে</span>
+                      <span className="font-extrabold text-xs text-emerald-950">অর্ডার অ্যালার্ট ও ব্যাকগ্রাউন্ড পুশ সক্রিয় আছে</span>
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                     </div>
-                    <p className="text-[11px] text-emerald-700">কাস্টমার নতুন অর্ডার করলেই ফোনে বেল বাজবে ও টেবিল অটো আপডেট হবে।</p>
+                    <p className="text-[11px] text-emerald-700">ওয়েবসাইট বা ব্রাউজার সম্পূর্ণ বন্ধ থাকলেও কাস্টমার অর্ডার করলেই আপনার ফোনে নোটিফিকেশন বেজে উঠবে।</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -1823,8 +1796,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     disabled={notificationLoading}
                     className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                   >
-                    <Volume2 className="w-3.5 h-3.5" />
-                    <span>টেস্ট সাউন্ড বাজান</span>
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>টেস্ট নোটিফিকেশন পাঠান</span>
                   </button>
                   <button
                     type="button"

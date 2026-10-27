@@ -105,6 +105,7 @@ export async function syncToFirestore(dbData: any): Promise<boolean> {
       contacts: dbData.contacts || [],
       adminPasswordHash: dbData.adminPasswordHash || 'admin123',
       adminFcmTokens: dbData.adminFcmTokens || [],
+      adminPushSubscriptions: dbData.adminPushSubscriptions || [],
       updatedAt: new Date().toISOString()
     }, { merge: true });
 
@@ -183,7 +184,8 @@ export async function loadFromFirestore(): Promise<any | null> {
       customerNotes: secData?.customerNotes || {},
       contacts: secData?.contacts || [],
       adminPasswordHash: secData?.adminPasswordHash || 'admin123',
-      adminFcmTokens: secData?.adminFcmTokens || []
+      adminFcmTokens: secData?.adminFcmTokens || [],
+      adminPushSubscriptions: secData?.adminPushSubscriptions || []
     };
   } catch (err: any) {
     console.error('[Firestore] Load from cloud failed:', err?.message || err);

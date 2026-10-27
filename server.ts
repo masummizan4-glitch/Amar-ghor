@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import webpush from 'web-push';
 import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore, saveSingleOrderToFirestore } from './src/lib/firestoreSync.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +51,36 @@ if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
+
+let vapidKeys = {
+  publicKey: '',
+  privateKey: ''
+};
+
+async function initWebPush() {
+  try {
+    if (existsSync(VAPID_FILE)) {
+      const raw = await fs.readFile(VAPID_FILE, 'utf-8');
+      vapidKeys = JSON.parse(raw);
+    } else {
+      vapidKeys = webpush.generateVAPIDKeys();
+      await fs.writeFile(VAPID_FILE, JSON.stringify(vapidKeys, null, 2), 'utf-8');
+      console.log('[WebPush] Generated new persistent VAPID keys for PWA background alerts');
+    }
+    if (vapidKeys.publicKey && vapidKeys.privateKey) {
+      webpush.setVapidDetails(
+        'mailto:masummizan4@gmail.com',
+        vapidKeys.publicKey,
+        vapidKeys.privateKey
+      );
+      console.log('[WebPush] Web-push configured successfully with VAPID');
+    }
+  } catch (err: any) {
+    console.warn('[WebPush] Init note:', err?.message || err);
+  }
+}
+initWebPush().catch(() => {});
 
 // Initial default products as specified by user requirements
 const DEFAULT_PRODUCTS = [
@@ -672,6 +703,75 @@ async function dispatchExternalOrderAlerts(order: any, settings: any) {
   }
 }
 
+/**
+ * Dispatch W3C Web Push to registered admin devices
+ * Wakes up mobile phone and sounds notification chime even when website/browser is completely closed!
+ */
+async function dispatchAdminWebPush(order: any) {
+  try {
+    const db = await readDB();
+    const subs: any[] = Array.isArray(db.adminPushSubscriptions) ? db.adminPushSubscriptions : [];
+    if (subs.length === 0) {
+      console.log('[WebPush] No admin push subscriptions registered yet');
+      return;
+    }
+
+    if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+      await initWebPush();
+    }
+
+    const customerName = order.customer?.name || 'কাস্টমার';
+    const customerPhone = order.customer?.phone || '';
+    const itemsCount = Array.isArray(order.items) ? order.items.length : 1;
+
+    const payload = JSON.stringify({
+      notification: {
+        title: '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
+        body: `অর্ডার #${order.orderNumber} • মোট: ৳${order.total} • ${customerName} (${customerPhone}) • ${itemsCount}টি পণ্য`,
+        icon: '/pwa-192x192.png',
+        badge: '/favicon.png'
+      },
+      data: {
+        url: '/?admin=true&tab=orders',
+        orderId: order.orderId || '',
+        orderNumber: order.orderNumber || '',
+        timestamp: Date.now().toString()
+      }
+    });
+
+    const options = {
+      TTL: 86400, // 24 hours retention
+      urgency: 'high' as const
+    };
+
+    const remainingSubs: any[] = [];
+    await Promise.all(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(sub, payload, options);
+          remainingSubs.push(sub);
+        } catch (err: any) {
+          const status = err?.statusCode;
+          if (status === 404 || status === 410) {
+            console.log(`[WebPush] Pruning expired admin endpoint: ${sub.endpoint?.slice(0, 45)}...`);
+          } else {
+            console.warn('[WebPush] Dispatch notice for subscription:', err?.message || err);
+            remainingSubs.push(sub);
+          }
+        }
+      })
+    );
+
+    if (remainingSubs.length !== subs.length) {
+      db.adminPushSubscriptions = remainingSubs;
+      await writeDB(db);
+    }
+    console.log(`[WebPush] Dispatched order #${order.orderNumber} background alert to ${subs.length} device(s)`);
+  } catch (err: any) {
+    console.warn('[WebPush] Dispatch error:', err?.message || err);
+  }
+}
+
 // ----------------- FRAUD & RISK SCORING HELPER ----------------- //
 function normalizeBdPhone(phone?: string): string {
   const digits = String(phone || '').replace(/[^\d]/g, '');
@@ -1153,6 +1253,7 @@ app.post('/api/orders', async (req, res) => {
     setImmediate(async () => {
       saveSingleOrderToFirestore(newOrder).catch((e) => console.warn('Order cloud write note:', e));
       dispatchExternalOrderAlerts(newOrder, db.settings).catch((e) => console.warn('Telegram alert note:', e));
+      dispatchAdminWebPush(newOrder).catch((e) => console.warn('WebPush alert note:', e));
 
       const count = newOrder.items?.length || 1;
       sendAdminNotification({
@@ -1854,6 +1955,183 @@ app.post('/api/admin/fcm-test', async (req, res) => {
     res.json({
       success: true,
       message: 'টেস্ট নোটিফিকেশন পাঠানো হয়েছে। আপনার ডিভাইসে চেক করুন।'
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5.2 Admin W3C Web Push Endpoints (Background Alert delivery when browser is closed)
+app.get('/api/admin/vapid-key', async (_req, res) => {
+  try {
+    if (!vapidKeys.publicKey) {
+      await initWebPush();
+    }
+    res.json({
+      success: true,
+      publicKey: vapidKeys.publicKey
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/push-subscription', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized: Admin authentication required' });
+    }
+
+    const { subscription } = req.body;
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: 'অবৈধ পুশ সাবস্ক্রিপশন ডাটা।' });
+    }
+
+    const db = await readDB();
+    db.adminPushSubscriptions = Array.isArray(db.adminPushSubscriptions) ? db.adminPushSubscriptions : [];
+
+    // Filter out existing subscription with same endpoint if re-registering
+    const existingIndex = db.adminPushSubscriptions.findIndex(
+      (s: any) => s.endpoint === subscription.endpoint
+    );
+
+    const subscriptionRecord = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth
+      },
+      registeredAt: new Date().toISOString(),
+      userAgent: req.headers['user-agent']?.slice(0, 100) || 'Unknown Device'
+    };
+
+    if (existingIndex >= 0) {
+      db.adminPushSubscriptions[existingIndex] = subscriptionRecord;
+    } else {
+      db.adminPushSubscriptions.push(subscriptionRecord);
+    }
+
+    await writeDB(db);
+    console.log(`[WebPush] Admin device registered. Total devices: ${db.adminPushSubscriptions.length}`);
+
+    res.json({
+      success: true,
+      message: 'আপনার এই ডিভাইসে ব্যাকগ্রাউন্ড নোটিফিকেশন সফলভাবে সক্রিয় হয়েছে!',
+      totalDevices: db.adminPushSubscriptions.length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/push-subscription', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { endpoint } = req.body;
+    const db = await readDB();
+    if (Array.isArray(db.adminPushSubscriptions) && endpoint) {
+      db.adminPushSubscriptions = db.adminPushSubscriptions.filter(
+        (s: any) => s.endpoint !== endpoint
+      );
+      await writeDB(db);
+      console.log(`[WebPush] Admin device unsubscribed. Remaining: ${db.adminPushSubscriptions.length}`);
+    }
+
+    res.json({ success: true, message: 'পুশ সাবস্ক্রিপশন সফলভাবে বাতিল করা হয়েছে।' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/push-status', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const db = await readDB();
+    const subs = Array.isArray(db.adminPushSubscriptions) ? db.adminPushSubscriptions : [];
+    res.json({
+      success: true,
+      enabled: subs.length > 0,
+      registeredCount: subs.length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/test-push', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const db = await readDB();
+    const subs: any[] = Array.isArray(db.adminPushSubscriptions) ? db.adminPushSubscriptions : [];
+    if (subs.length === 0) {
+      return res.status(400).json({
+        error: 'কোনো নিবন্ধিত ডিভাইস পাওয়া যায়নি। অনুগ্রহ করে "নোটিফিকেশন চালু করুন" বাটনে ক্লিক করে নোটিফিকেশন অনুমোদন দিন।'
+      });
+    }
+
+    if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+      await initWebPush();
+    }
+
+    const testPayload = JSON.stringify({
+      notification: {
+        title: '🔔 টেস্ট ব্যাকগ্রাউন্ড অ্যালার্ট!',
+        body: 'আমার ঘর Online: নোটিফিকেশন সঠিকভাবে কাজ করছে! ওয়েবসাইট বন্ধ থাকলেও নতুন কাস্টমার অর্ডার আসলে এভাবে ফোনে নোটিফিকেশন বাজবে।',
+        icon: '/pwa-192x192.png',
+        badge: '/favicon.png'
+      },
+      data: {
+        url: '/?admin=true&tab=orders',
+        type: 'test_alert',
+        timestamp: Date.now().toString()
+      }
+    });
+
+    let successCount = 0;
+    const options = { TTL: 60, urgency: 'high' as const };
+    const remainingSubs: any[] = [];
+
+    await Promise.all(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(sub, testPayload, options);
+          successCount++;
+          remainingSubs.push(sub);
+        } catch (err: any) {
+          const status = err?.statusCode;
+          if (status === 404 || status === 410) {
+            console.log(`[WebPush] Pruned expired test endpoint: ${sub.endpoint?.slice(0, 45)}...`);
+          } else {
+            console.warn('[WebPush] Test push delivery issue:', err?.message || err);
+            remainingSubs.push(sub);
+          }
+        }
+      })
+    );
+
+    if (remainingSubs.length !== subs.length) {
+      db.adminPushSubscriptions = remainingSubs;
+      await writeDB(db);
+    }
+
+    res.json({
+      success: true,
+      message: `${successCount}টি নিবন্ধিত ডিভাইসে ব্যাকগ্রাউন্ড টেস্ট নোটিফিকেশন পাঠানো হয়েছে! অনুগ্রহ করে আপনার মোবাইলের নোটিফিকেশন বার চেক করুন।`,
+      successCount,
+      totalDevices: subs.length
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -94,7 +94,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// ----------------- FIREBASE CLOUD MESSAGING (PUSH NOTIFICATIONS) ----------------- //
+// ----------------- PUSH NOTIFICATIONS (W3C WEB PUSH & FCM) ----------------- //
 self.addEventListener('push', (event) => {
   let data = {};
   try {
@@ -119,10 +119,13 @@ self.addEventListener('push', (event) => {
       orderId: customData.orderId || '',
       orderNumber: customData.orderNumber || ''
     },
-    vibrate: [200, 100, 200, 100, 200],
-    tag: customData.orderId ? `order-${customData.orderId}` : 'amarghor-admin-alert',
+    vibrate: [400, 150, 400, 150, 600, 200, 800],
+    tag: customData.orderId ? `order-${customData.orderId}` : `amarghor-${Date.now()}`,
     renotify: true,
-    requireInteraction: true
+    requireInteraction: true,
+    actions: [
+      { action: 'open_order', title: '📦 অর্ডার দেখুন' }
+    ]
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
