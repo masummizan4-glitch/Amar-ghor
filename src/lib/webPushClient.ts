@@ -46,6 +46,14 @@ export async function subscribeAdminToWebPush(
     };
   }
 
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+  if (isInIframe) {
+    return {
+      success: false,
+      message: 'গুগল ক্রোমের নিরাপত্তার নিয়মানুযায়ী AI Studio প্রিভিউ ফ্রেমের ভেতরে ব্যাকগ্রাউন্ড পুশ সক্রিয় করা যায় না। অনুগ্রহ করে আসল গুগল ক্রোম ব্রাউজারে সাইটটি সরাসরি খুলুন।'
+    };
+  }
+
   try {
     // 1. Request permission
     const permission = await Notification.requestPermission();
@@ -155,7 +163,10 @@ export async function sendTestWebPush(
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
-      throw new Error(data.error || 'টেস্ট নোটিফিকেশন পাঠানো যায়নি।');
+      return {
+        success: false,
+        message: data.error || 'টেস্ট নোটিফিকেশন পাঠানো যায়নি।'
+      };
     }
     return {
       success: true,

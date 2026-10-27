@@ -1311,12 +1311,39 @@ app.post('/api/admin/telegram-test', async (req, res) => {
     });
     const data = await tgRes.json();
     if (data.ok) {
-      return res.json({ success: true, message: 'আপনার টেলিগ্রামে টেস্ট নোটিফিকেশন সফলভাবে পাঠানো হয়েছে!' });
+      // Auto-save verified working telegram credentials permanently to settings
+      db.settings = db.settings || {};
+      db.settings.telegramBotToken = effectiveToken;
+      db.settings.telegramChatId = effectiveChat;
+      await writeDB(db);
+      return res.json({ 
+        success: true, 
+        message: 'আপনার টেলিগ্রামে টেস্ট নোটিফিকেশন সফলভাবে পাঠানো হয়েছে এবং সেটিংস স্থায়ীভাবে সংরক্ষিত হয়েছে!' 
+      });
     } else {
       return res.status(400).json({ error: `টেলিগ্রাম ত্রুটি: ${data.description || 'মেসেজ পাঠানো সম্ভব হয়নি'}` });
     }
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || 'টেলিগ্রাম সংযোগ ব্যর্থ হয়েছে' });
+  }
+});
+
+// Admin Save Telegram Settings Endpoint
+app.post('/api/admin/telegram-settings', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized access' });
+    }
+    const { botToken, chatId } = req.body;
+    const db = await readDB();
+    db.settings = db.settings || {};
+    db.settings.telegramBotToken = (botToken || '').trim();
+    db.settings.telegramChatId = (chatId || '').trim();
+    await writeDB(db);
+    res.json({ success: true, message: 'টেলিগ্রাম সেটিংস সংরক্ষিত হয়েছে!', settings: db.settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

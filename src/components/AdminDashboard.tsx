@@ -6,7 +6,7 @@ import {
   Sliders, Sparkles, Layout, Globe, Type, MessageCircle, Phone, Search, FileText, 
   CreditCard, Bell, ChevronRight, ToggleLeft, ToggleRight, ShieldCheck,
   ShieldAlert, UserX, UserCheck, Users, Ban, Download, Filter, HelpCircle, Shield,
-  History, Star, PhoneCall, Link2, ExternalLink, Share2, Key, Send, Volume2
+  History, Star, PhoneCall, Smartphone, Link2, ExternalLink, Share2, Key, Send, Volume2
 } from 'lucide-react';
 import { Product, Order, SiteSettings, ContactMessage, SiteFeatures, BlacklistEntry, CustomerProfile, CustomerReview, ScreenshotReview } from '../types';
 import { formatPrice, toBnNumber, extractProductPackWeight, getProductWeightOptions, calculateItemPrice, formatWeightLabel, getProductShareUrl } from '../utils/formatters';
@@ -109,39 +109,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   });
   const [testingTelegram, setTestingTelegram] = useState<boolean>(false);
+  const [savingTelegram, setSavingTelegram] = useState<boolean>(false);
   const [telegramTestMsg, setTelegramTestMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [registeredDeviceCount, setRegisteredDeviceCount] = useState<number>(0);
+  const [isDeviceSubscribedHere, setIsDeviceSubscribedHere] = useState<boolean>(false);
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+  const refreshPushStatus = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/push-status', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRegisteredDeviceCount(data.registeredCount || 0);
+        setNotificationsEnabled((data.registeredCount || 0) > 0);
+      }
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription().catch(() => null);
+          setIsDeviceSubscribedHere(!!sub);
+        }
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     setPushSupported(isPushSupported());
     const stored = typeof window !== 'undefined' ? localStorage.getItem('amarghor_admin_notifications_enabled') : null;
-    if (stored !== 'false') {
-      try {
-        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
-      } catch {}
-      setNotificationsEnabled(true);
-    } else {
+    if (stored === 'false') {
       setNotificationsEnabled(false);
     }
   }, []);
 
   useEffect(() => {
     if (token) {
-      const localActive = isNotificationsEnabledLocally();
-      if (localActive) {
-        setNotificationsEnabled(true);
-      }
-      fetch('/api/admin/push-status', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && typeof data.enabled === 'boolean') {
-            if (data.enabled || localActive) {
-              setNotificationsEnabled(true);
-            }
-          }
-        })
-        .catch(() => {});
+      refreshPushStatus();
     }
   }, [token]);
 
@@ -165,43 +170,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNotificationMsg(null);
 
     try {
-      if (notificationsEnabled) {
+      if (isDeviceSubscribedHere) {
         await unsubscribeAdminFromWebPush(token).catch(() => {});
         localStorage.setItem('amarghor_admin_notifications_enabled', 'false');
-        setNotificationsEnabled(false);
-        setNotificationMsg({ text: 'অর্ডার নোটিফিকেশন সাময়িকভাবে বন্ধ করা হয়েছে।', type: 'info' });
+        setIsDeviceSubscribedHere(false);
+        await refreshPushStatus();
+        setNotificationMsg({ text: 'এই ডিভাইসের ব্যাকগ্রাউন্ড পুশ নোটিফিকেশন বন্ধ করা হয়েছে।', type: 'info' });
       } else {
+        if (isInIframe) {
+          playOrderSound();
+          setNotificationMsg({
+            text: '⚠️ গুগল ক্রোমের সিকিউরিটির কারণে AI Studio প্রিভিউ ফ্রেমের ভেতর থেকে ব্যাকগ্রাউন্ড পুশ রেজিস্টার করা যায় না। নোটিফিকেশন পেতে সরাসরি গুগল ক্রোম ব্রাউজারে আসল ওয়েবসাইটটি খুলুন।',
+            type: 'error'
+          });
+          return;
+        }
+
         // 1. Play immediate audio & haptic test
         playOrderSound();
         triggerHapticFeedback();
-        localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
-        setNotificationsEnabled(true);
 
         // 2. Request browser permission and register W3C Web Push in Service Worker
         const res = await subscribeAdminToWebPush(token);
         if (res.success) {
+          localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
+          setNotificationsEnabled(true);
+          setIsDeviceSubscribedHere(true);
+          await refreshPushStatus();
           setNotificationMsg({
             text: res.message,
             type: 'success'
           });
         } else {
-          const isIframe = typeof window !== 'undefined' && window.self !== window.top;
           setNotificationMsg({
-            text: isIframe
-              ? '✅ সাউন্ড সক্রিয় হয়েছে! অ্যাপ/ওয়েবসাইট বন্ধ অবস্থায় ব্যাকগ্রাউন্ড নোটিফিকেশন পেতে সাইটটি গুগল ক্রোমে সরাসরি খুলুন।'
-              : res.message,
-            type: res.success ? 'success' : 'info'
+            text: res.message,
+            type: 'error'
           });
         }
       }
     } catch (err: any) {
-      localStorage.setItem('amarghor_admin_notifications_enabled', 'true');
-      setNotificationsEnabled(true);
-      playOrderSound();
-      triggerHapticFeedback();
       setNotificationMsg({
-        text: '✅ অর্ডার অ্যালার্ট সাউন্ড সক্রিয় করা হয়েছে!',
-        type: 'success'
+        text: err?.message || 'নোটিফিকেশন চালু করার সময় অপ্রত্যাশিত সমস্যা হয়েছে।',
+        type: 'error'
       });
     } finally {
       setNotificationLoading(false);
@@ -241,27 +251,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       playOrderSound();
       triggerHapticFeedback();
 
+      if (registeredDeviceCount === 0) {
+        setNotificationMsg({
+          text: '⚠️ সার্ভারে কোনো ফোন নিবন্ধিত নেই! ব্যাকগ্রাউন্ড পুশ পেতে সরাসরি গুগল ক্রোমে সাইটটি খুলে "এই ফোনে পুশ নোটিফিকেশন চালু করুন" বাটনে ক্লিক করে নোটিফিকেশন অনুমোদন দিন।',
+          type: 'error'
+        });
+        return;
+      }
+
       // Trigger server-side background web push test
       const pushRes = await sendTestWebPush(token);
       if (pushRes.success) {
         setNotificationMsg({
-          text: `✅ ${pushRes.message}`,
+          text: `✅ ${pushRes.message} (আপনার মোবাইলের স্ট্যাটাস বার / নোটিফিকেশন প্যানেল চেক করুন)`,
           type: 'success'
         });
       } else {
-        await showNativeAdminNotification(
-          '🛒 টেস্ট কাস্টমার অর্ডার অ্যালার্ট',
-          'অর্ডার #১০৭২ | মোট: ৳১৫৫০ | খাঁটি সরিষার তেল ও সুন্দরবনের মধু'
-        );
         setNotificationMsg({
-          text: 'আপনার মোবাইলে সাউন্ড ও টেস্ট নোটিফিকেশন সফলভাবে বেজেছে!',
-          type: 'success'
+          text: `❌ ${pushRes.message}`,
+          type: 'error'
         });
       }
     } catch (err: any) {
-      setNotificationMsg({ text: err.message || 'টেস্ট সম্পন্ন হয়েছে', type: 'info' });
+      setNotificationMsg({ text: err?.message || 'টেস্ট সম্পন্ন হয়েছে', type: 'info' });
     } finally {
       setNotificationLoading(false);
+    }
+  };
+
+  const handleSaveTelegram = async () => {
+    if (!token) return;
+    setSavingTelegram(true);
+    setTelegramTestMsg(null);
+    try {
+      const res = await fetch('/api/admin/telegram-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          botToken: settingsForm.telegramBotToken,
+          chatId: settingsForm.telegramChatId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTelegramTestMsg({ text: '✅ টেলিগ্রাম তথ্য সফলভাবে সংরক্ষণ করা হয়েছে!', ok: true });
+        if (data.settings) onUpdateSettings(data.settings);
+      } else {
+        setTelegramTestMsg({ text: '❌ ' + (data.error || 'সংরক্ষণ ব্যর্থ'), ok: false });
+      }
+    } catch (err: any) {
+      setTelegramTestMsg({ text: '❌ ' + (err?.message || 'সমস্যা হয়েছে'), ok: false });
+    } finally {
+      setSavingTelegram(false);
     }
   };
 
@@ -286,11 +330,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setTelegramTestMsg({ text: '✅ ' + data.message, ok: true });
         playOrderSound();
         triggerHapticFeedback();
+        if (settingsForm.telegramBotToken && settingsForm.telegramChatId) {
+          onUpdateSettings({
+            telegramBotToken: settingsForm.telegramBotToken,
+            telegramChatId: settingsForm.telegramChatId
+          });
+        }
       } else {
         setTelegramTestMsg({ text: '❌ ' + (data.error || 'টেস্ট মেসেজ পাঠানো যায়নি'), ok: false });
       }
     } catch (err: any) {
-      setTelegramTestMsg({ text: '❌ ' + (err.message || 'সার্ভার সংযোগ ত্রুটি'), ok: false });
+      setTelegramTestMsg({ text: '❌ ' + (err?.message || 'সার্ভার সংযোগ ত্রুটি'), ok: false });
     } finally {
       setTestingTelegram(false);
     }
@@ -3890,6 +3940,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Tab: Store Settings */}
             {activeTab === 'settings' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* ⚠️ AI Studio Preview Iframe Detection Warning */}
+                {isInIframe && (
+                  <div className="bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 p-4 sm:p-5 rounded-3xl shadow-lg border-2 border-amber-600/40 space-y-3">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-slate-950 text-[#E8C547] flex items-center justify-center shrink-0 shadow-xs">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-black text-sm sm:text-base text-slate-950">
+                            গুরুত্বপূর্ণ: আপনি বর্তমানে গুগল এআই স্টুডিও এডিটর প্রিভিউতে আছেন!
+                          </h4>
+                          <p className="text-xs text-slate-900 leading-relaxed mt-0.5 font-medium">
+                            গুগল ক্রোম ও অ্যান্ড্রয়েডের নিরাপত্তার কারণে কোনো এডিটর প্রিভিউ ফ্রেমের ভেতরে ব্যাকগ্রাউন্ড পুশ নোটিফিকেশন অনুমোদন দেওয়া যায় না। 
+                            ফোন লক থাকা বা ব্রাউজার বন্ধ থাকা অবস্থায় ১০০% রিয়েল-টাইম নোটিফিকেশন পেতে সরাসরি আসল গুগল ক্রোমে সাইটটি খুলুন।
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href="https://ais-pre-gbnhtenxaui7tam4bmt64b-375809004900.asia-southeast1.run.app/?admin=true&tab=settings"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-[#E8C547] font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>সরাসরি আসল ক্রোম ব্রাউজারে খুলুন</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 🔔 Admin Push Notification Control Center */}
                 <div className="bg-gradient-to-br from-emerald-950 via-[#133E2B] to-emerald-900 text-white p-5 sm:p-6 rounded-3xl shadow-lg border border-emerald-700/50 space-y-5">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-emerald-700/60">
@@ -3900,18 +3983,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-extrabold text-base sm:text-lg text-white">
-                            অ্যাডমিন পুশ নোটিফিকেশন সিস্টেম (FCM Push)
+                            মোবাইল ব্রাউজার ব্যাকগ্রাউন্ড পুশ নোটিফিকেশন (W3C Web Push)
                           </h3>
                           <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            notificationsEnabled 
-                              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/40' 
-                              : 'bg-white/10 text-gray-300 border-white/20'
+                            registeredDeviceCount > 0 
+                              ? "bg-emerald-400/20 text-emerald-200 border-emerald-400/40" 
+                              : "bg-amber-400/20 text-amber-200 border-amber-400/40"
                           }`}>
-                            {notificationsEnabled ? '● নোটিফিকেশন সক্রিয়' : '○ নোটিফিকেশন বন্ধ'}
+                            {registeredDeviceCount > 0 
+                              ? `● ${toBnNumber(registeredDeviceCount)}টি ফোন ব্যাকগ্রাউন্ডে সক্রিয়` 
+                              : "○ কোনো ডিভাইস যুক্ত নেই (০টি)"}
                           </span>
                         </div>
                         <p className="text-xs text-emerald-100/80 mt-1 leading-relaxed">
-                          নতুন কাস্টমার অর্ডার এবং ইনকোয়ারি আসলে তাৎক্ষণিক পুশ নোটিফিকেশন ও মিষ্টি অ্যালার্ট শব্দ বাজবে
+                          ওয়েবসাইট বা ব্রাউজার বন্ধ থাকলেও কাস্টমার নতুন অর্ডার দিলে আপনার ফোনের স্ট্যাটাস বারে ছবি ও তথ্যসহ নোটিফিকেশন ভেসে উঠবে এবং মিষ্টি অ্যালার্ট সাউন্ড বাজবে
                         </p>
                       </div>
                     </div>
@@ -3922,59 +4007,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={handleToggleNotification}
                         disabled={notificationLoading}
                         className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer disabled:opacity-50 ${
-                          notificationsEnabled 
-                            ? 'bg-red-500/90 hover:bg-red-600 text-white border border-red-400/30' 
-                            : 'bg-[#E8C547] hover:bg-[#d8b537] text-gray-900'
+                          isDeviceSubscribedHere 
+                            ? "bg-red-500/90 hover:bg-red-600 text-white border border-red-400/30" 
+                            : "bg-[#E8C547] hover:bg-[#d8b537] text-gray-900 font-extrabold"
                         }`}
                       >
                         {notificationLoading ? (
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : notificationsEnabled ? (
+                        ) : isDeviceSubscribedHere ? (
                           <ToggleRight className="w-4 h-4" />
                         ) : (
                           <ToggleLeft className="w-4 h-4" />
                         )}
-                        <span>{notificationsEnabled ? 'নোটিফিকেশন বন্ধ করুন' : 'নোটিফিকেশন চালু করুন'}</span>
+                        <span>{isDeviceSubscribedHere ? "এই ফোনে নোটিফিকেশন বন্ধ করুন" : "🔔 এই ফোনে পুশ নোটিফিকেশন চালু করুন"}</span>
                       </button>
 
-                      {notificationsEnabled && (
-                        <button
-                          type="button"
-                          onClick={handleTestNotification}
-                          disabled={notificationLoading}
-                          className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5 text-[#E8C547]" />
-                          <span>টেস্ট নোটিফিকেশন</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleTestNotification}
+                        disabled={notificationLoading}
+                        className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-white/20 transition-all cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5 text-[#E8C547]" />
+                        <span>টেস্ট নোটিফিকেশন পাঠান</span>
+                      </button>
 
-                      <div className="px-3.5 py-2.5 bg-emerald-800/80 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-500/40 shadow-xs">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-                        <span>সার্বক্ষণিক ক্লাউড অ্যালার্ট সক্রিয় ✓</span>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={refreshPushStatus}
+                        className="p-2.5 bg-white/5 hover:bg-white/15 text-white rounded-xl border border-white/15 transition-all cursor-pointer"
+                        title="স্ট্যাটাস রিফ্রেশ করুন"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Security, Privacy & Reliability Guarantees */}
+                  {/* Device Status Live Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     <div className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1">
                       <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>কাস্টমার প্রাইভেসি</span>
+                        <Smartphone className="w-4 h-4" />
+                        <span>এই ব্রাউজার স্ট্যাটাস</span>
                       </div>
-                      <p className="text-[11px] text-emerald-100/70 leading-relaxed">
-                        নোটিফিকেশন বডিতে কাস্টমারের কোনো ফোন নম্বর বা ব্যক্তিগত ঠিকানা পাঠানো হয় না। সকল তথ্য কেবল সুরক্ষিত অ্যাডমিন প্যানেলে সংরক্ষিত।
+                      <p className="text-[11px] text-emerald-100/90 font-medium">
+                        {isDeviceSubscribedHere ? "✅ এই ফোনে পুশ সক্রিয় আছে" : "⚠️ এই ফোনে এখনো পুশ সক্রিয় করা হয়নি"}
                       </p>
                     </div>
 
                     <div className="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1">
                       <div className="flex items-center gap-1.5 text-[#E8C547] font-bold">
-                        <Lock className="w-4 h-4" />
-                        <span>১০০% নিরাপদ অ্যাডমিন অ্যাক্সেস</span>
+                        <Users className="w-4 h-4" />
+                        <span>সার্ভারে মোট সংযুক্ত ফোন</span>
                       </div>
-                      <p className="text-[11px] text-emerald-100/70 leading-relaxed">
-                        সাধারণ ভিজিটর বা মোবাইল অ্যাপ ইনস্টল করা কোনো কাস্টমারের ডিভাইসে অর্ডার নোটিফিকেশন যাওয়ার কোনো সুযোগ নেই।
+                      <p className="text-[11px] text-emerald-100/90 font-medium">
+                        {registeredDeviceCount > 0 ? `${toBnNumber(registeredDeviceCount)}টি ডিভাইসে পুশ যাবে` : "০টি (নতুন ফোন যুক্ত করুন)"}
                       </p>
                     </div>
 
@@ -3990,8 +4077,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* 📱 24/7 MOBILE BACKGROUND NOTIFICATION CHANNEL (TELEGRAM & PWA) */}
-                <div className="bg-gradient-to-br from-[#0c281e] via-[#133E2B] to-[#1a4a35] text-white p-5 sm:p-6 rounded-3xl shadow-xl border-2 border-[#E8C547]/40 space-y-5 animate-in fade-in">
+                {/* 📱 24/7 MOBILE BACKGROUND NOTIFICATION CHANNEL (TELEGRAM - 100% RELIABLE) */}
+                <div className="bg-gradient-to-br from-[#0c281e] via-[#133E2B] to-[#1a4a35] text-white p-5 sm:p-6 rounded-3xl shadow-xl border-2 border-[#E8C547]/50 space-y-5 animate-in fade-in">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/15 pb-4">
                     <div className="flex items-start gap-3.5">
                       <div className="w-12 h-12 rounded-2xl bg-[#E8C547] text-gray-950 flex items-center justify-center shrink-0 shadow-md">
@@ -4000,23 +4087,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-extrabold text-base sm:text-lg text-white">
-                            সার্বক্ষণিক মোবাইল পুশ নোটিফিকেশন (ওয়েবসাইট বন্ধ থাকলেও অ্যালার্ট)
+                            টেলিগ্রাম ইনস্ট্যান্ট অর্ডার অ্যালার্ট (১০০% নির্ভরযোগ্য ও গ্যারান্টিড)
                           </h3>
                           <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                             settingsForm.telegramBotToken && settingsForm.telegramChatId
-                              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/40'
-                              : 'bg-amber-400/20 text-amber-200 border-amber-400/40'
+                              ? "bg-emerald-400/20 text-emerald-200 border-emerald-400/40"
+                              : "bg-amber-400/20 text-amber-200 border-amber-400/40"
                           }`}>
-                            {settingsForm.telegramBotToken && settingsForm.telegramChatId ? '● টেলিগ্রাম চ্যানেল সংযুক্ত' : '○ কনফিগার করুন'}
+                            {settingsForm.telegramBotToken && settingsForm.telegramChatId ? "● টেলিগ্রাম চ্যানেল সক্রিয় ✓" : "○ কনফিগার করুন"}
                           </span>
                         </div>
                         <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed">
-                          আপনি ওয়েবসাইটে না থাকলেও, ফোন লক বা স্ক্রিন অফ থাকলেও কাস্টমার অন্য যেকোনো ডিভাইস থেকে অর্ডার করলেই আপনার ফোনে ১০০% নিশ্চিতভাবে অ্যালার্ট ও রিংটোন বেজে উঠবে।
+                          ⭐ <b>কেন এটি সবচেয়ে নির্ভরযোগ্য?</b> ফোন লক থাকুক, স্ক্রিন অফ থাকুক বা ক্রোম ব্রাউজার বন্ধ থাকুক—টেলিগ্রাম মেসেজ আসা মাত্রই আপনার ফোনে ফুল ভলিউমে অ্যালার্ট রিংটোন বেজে উঠবে এবং অর্ডারের সকল বিবরণ (গ্রাহকের নাম, মোবাইল, ঠিকানা ও পণ্যের তালিকা) দেখতে পাবেন।
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleSaveTelegram}
+                        disabled={savingTelegram}
+                        className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5 text-[#E8C547]" />
+                        <span>{savingTelegram ? "সংরক্ষণ হচ্ছে..." : "টেলিগ্রাম তথ্য সেভ"}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleTestTelegram}
@@ -4040,14 +4137,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   {/* Feedback Message */}
                   {telegramTestMsg && (
-                    <div className={`p-3 rounded-2xl text-xs font-bold border flex items-center justify-between ${
+                    <div className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center justify-between shadow-sm ${
                       telegramTestMsg.ok 
-                        ? 'bg-emerald-950/80 border-emerald-400/50 text-emerald-200' 
-                        : 'bg-red-950/80 border-red-400/50 text-red-200'
+                        ? "bg-emerald-950/90 border-emerald-400/60 text-emerald-100" 
+                        : "bg-red-950/90 border-red-400/60 text-red-100"
                     }`}>
-                      <span>{telegramTestMsg.text}</span>
-                      <button type="button" onClick={() => setTelegramTestMsg(null)} className="p-1 hover:bg-white/10 rounded cursor-pointer">
-                        <X className="w-3.5 h-3.5" />
+                      <span className="leading-relaxed">{telegramTestMsg.text}</span>
+                      <button type="button" onClick={() => setTelegramTestMsg(null)} className="p-1 hover:bg-white/10 rounded cursor-pointer shrink-0 ml-2">
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -4060,7 +4157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </label>
                       <input
                         type="text"
-                        value={settingsForm.telegramBotToken || ''}
+                        value={settingsForm.telegramBotToken || ""}
                         onChange={(e) => setSettingsForm({ ...settingsForm, telegramBotToken: e.target.value.trim() })}
                         placeholder="e.g. 7123456789:AAHk..."
                         className="w-full px-3.5 py-2.5 bg-black/30 border border-emerald-500/40 rounded-xl text-white font-mono text-xs focus:ring-2 focus:ring-[#E8C547] focus:outline-none"
@@ -4076,7 +4173,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </label>
                       <input
                         type="text"
-                        value={settingsForm.telegramChatId || ''}
+                        value={settingsForm.telegramChatId || ""}
                         onChange={(e) => setSettingsForm({ ...settingsForm, telegramChatId: e.target.value.trim() })}
                         placeholder="e.g. 123456789"
                         className="w-full px-3.5 py-2.5 bg-black/30 border border-emerald-500/40 rounded-xl text-white font-mono text-xs focus:ring-2 focus:ring-[#E8C547] focus:outline-none"
@@ -4088,15 +4185,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
 
                   {/* Simple Setup Instructions Guide */}
-                  <div className="bg-black/25 p-4 rounded-2xl border border-white/10 space-y-2 text-xs">
+                  <div className="bg-black/30 p-4 rounded-2xl border border-white/10 space-y-2 text-xs">
                     <div className="font-extrabold text-[#E8C547] flex items-center gap-1.5 text-xs">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>১ মিনিটে সার্বক্ষণিক টেলিগ্রাম পুশ অ্যালার্ট চালু করার নিয়ম:</span>
+                      <Sparkles className="w-4 h-4" />
+                      <span>১ মিনিটে সার্বক্ষণিক টেলিগ্রাম পুশ অ্যালার্ট চালু করার সহজ নিয়ম:</span>
                     </div>
-                    <ol className="list-decimal list-inside space-y-1 text-[11px] text-emerald-100/90 leading-relaxed">
-                      <li>আপনার ফোনের Telegram অ্যাপে গিয়ে সার্চ করুন <b>@BotFather</b> এবং <code>/newbot</code> লিখে আপনার স্টোরের একটি বট তৈরি করে টোকেনটি উপরের ঘরে দিন।</li>
-                      <li>এরপর Telegram-এ <b>@userinfobot</b> এ <code>/start</code> দিন এবং আপনার প্রাপ্ত <b>Id</b> সংখ্যাটি চ্যাট আইডি ঘরে দিন।</li>
-                      <li>আপনার তৈরি করা বটে ঢুকে <b>Start</b> চাপুন এবং এখানে <b>'সেটিংস সংরক্ষণ করুন'</b> দিয়ে <b>'টেলিগ্রামে টেস্ট পাঠান'</b> বাটনে ক্লিক করুন!</li>
+                    <ol className="list-decimal list-inside space-y-1 text-[11px] text-emerald-100/90 leading-relaxed font-medium">
+                      <li>আপনার ফোনের Telegram অ্যাপে গিয়ে সার্চ করুন <b>@BotFather</b> এবং <code>/newbot</code> লিখে আপনার শপের একটি বট তৈরি করে প্রাপ্ত <b>Token</b> টি কপি করে উপরের ঘরে দিন।</li>
+                      <li>আপনার তৈরি করা বটে একবার ঢুকে <b>Start</b> বাটনে চাপ দিন।</li>
+                      <li>এরপর Telegram-এ <b>@userinfobot</b> এ গিয়ে <code>/start</code> দিন এবং আপনার প্রাপ্ত <b>Id</b> সংখ্যাটি চ্যাট আইডি ঘরে দিন।</li>
+                      <li><b>'টেলিগ্রামে টেস্ট পাঠান'</b> বাটনে ক্লিক করুন—সাথে সাথে টেস্ট মেসেজ ও রিংটোন বেজে উঠবে এবং সেটিংস স্থায়ীভাবে সংরক্ষিত হয়ে যাবে!</li>
                     </ol>
                   </div>
                 </div>
