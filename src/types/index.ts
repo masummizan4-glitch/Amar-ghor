@@ -215,4 +215,8 @@ export interface SiteSettings {
   maxOrdersPerPhoneDay?: number;
   screenshotReviews?: ScreenshotReview[];
   liveSiteUrl?: string;
+  // External Instant Alerts (Telegram & Email)
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  adminAlertEmail?: string;
 }

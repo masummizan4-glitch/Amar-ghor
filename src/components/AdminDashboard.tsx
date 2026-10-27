@@ -25,7 +25,8 @@ import {
   updateOrderStatusInCloud,
   changeAdminPasswordInCloud,
   deleteReviewFromCloud,
-  saveScreenshotReviewsToCloud
+  saveScreenshotReviewsToCloud,
+  listenToCloudOrders
 } from '../lib/clientFirebase';
 import { 
   subscribeAdminPush, 
@@ -104,7 +105,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return VAPID_PUBLIC_KEY;
     }
   });
-  const [showVapidModal, setShowVapidModal] = useState<boolean>(false);
+  const [testingTelegram, setTestingTelegram] = useState<boolean>(false);
+  const [telegramTestMsg, setTelegramTestMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     isPushNotificationSupported().then(setPushSupported);
@@ -240,7 +242,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       localStorage.setItem('amarghor_custom_vapid_key', cleanKey);
       setCustomVapidKey(cleanKey);
-      setShowVapidModal(false);
       setNotificationLoading(true);
       const res = await subscribeAdminPush(token!, cleanKey);
       if (res.success) {
@@ -288,6 +289,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setNotificationMsg({ text: err.message || 'টেস্ট সম্পন্ন হয়েছে', type: 'info' });
     } finally {
       setNotificationLoading(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    if (!token) return;
+    setTestingTelegram(true);
+    setTelegramTestMsg(null);
+    try {
+      const res = await fetch('/api/admin/telegram-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          botToken: settingsForm.telegramBotToken,
+          chatId: settingsForm.telegramChatId
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTelegramTestMsg({ text: '✅ ' + data.message, ok: true });
+        playOrderSound();
+        triggerHapticFeedback();
+      } else {
+        setTelegramTestMsg({ text: '❌ ' + (data.error || 'টেস্ট মেসেজ পাঠানো যায়নি'), ok: false });
+      }
+    } catch (err: any) {
+      setTelegramTestMsg({ text: '❌ ' + (err.message || 'সার্ভার সংযোগ ত্রুটি'), ok: false });
+    } finally {
+      setTestingTelegram(false);
     }
   };
 
@@ -466,12 +498,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setToken(null);
   };
 
-  // Fetch Orders
+  // Fetch Orders (Always combines Server API, Cloud Firestore, and Local)
   const fetchOrders = async () => {
     if (!token) return;
     setOrdersLoading(true);
     try {
-      let fetched: Order[] | null = null;
+      let fetched: Order[] = [];
       try {
         const res = await fetch('/api/orders', {
           headers: { Authorization: `Bearer ${token}` }
@@ -487,22 +519,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         console.warn('Backend fetch orders unreachable, checking Cloud Firestore:', err);
       }
 
-      // Fallback to Cloud Firestore and localStorage for Netlify
-      if (!fetched || fetched.length === 0) {
-        const cloudOrders = await loadOrdersFromCloud();
-        const localSaved = JSON.parse(localStorage.getItem('amarghor_orders') || '[]');
-        const combined = [...cloudOrders];
-        localSaved.forEach((loc: Order) => {
-          if (!combined.some((c) => c.orderId === loc.orderId)) {
-            combined.push(loc);
-          }
-        });
-        fetched = combined;
-      }
+      // Always load and merge Cloud Firestore orders so orders placed from ANY device appear!
+      const cloudOrders = await loadOrdersFromCloud().catch(() => []);
+      const localSaved = JSON.parse(localStorage.getItem('amarghor_orders') || '[]');
+      const orderMap = new Map<string, Order>();
 
-      if (fetched) {
-        setOrders(fetched);
-      }
+      fetched.forEach((o) => {
+        if (o && (o.orderId || o.orderNumber)) orderMap.set(o.orderId || o.orderNumber, o);
+      });
+      cloudOrders.forEach((o) => {
+        if (o && (o.orderId || o.orderNumber)) orderMap.set(o.orderId || o.orderNumber, o);
+      });
+      localSaved.forEach((loc: Order) => {
+        if (loc && (loc.orderId || loc.orderNumber)) orderMap.set(loc.orderId || loc.orderNumber, loc);
+      });
+
+      const combined = Array.from(orderMap.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+
+      combined.forEach((o) => {
+        if (o.orderId) knownOrderIdsRef.current.add(o.orderId);
+        if (o.orderNumber) knownOrderIdsRef.current.add(o.orderNumber);
+      });
+
+      setOrders(combined);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     } finally {
@@ -606,7 +647,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     fetchBlacklist();
     fetchCustomers();
 
-    // 8-second live polling for new customer orders
+    // 1. Instant Real-Time WebSocket Listener directly via Cloud Firestore
+    const unsubCloudOrders = listenToCloudOrders((cloudOrders, isInitial) => {
+      if (!cloudOrders || cloudOrders.length === 0) return;
+
+      if (!isInitial && knownOrderIdsRef.current.size > 0) {
+        const brandNew = cloudOrders.filter(
+          (o) => !knownOrderIdsRef.current.has(o.orderId) && !knownOrderIdsRef.current.has(o.orderNumber)
+        );
+        if (brandNew.length > 0) {
+          const latest = brandNew[0];
+          const count = latest.items?.length || 1;
+          const total = latest.total ?? latest.subtotal ?? 0;
+
+          // Sound, vibration, and push notification
+          playOrderSound();
+          triggerHapticFeedback();
+          showNativeAdminNotification(
+            '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
+            `অর্ডার #${latest.orderNumber} | মোট: ৳${total} | ${count}টি পণ্য (${latest.customer?.name || ''})`
+          );
+
+          setNotificationMsg({
+            text: `🛒 নতুন অর্ডার গ্রহণ করা হয়েছে! অর্ডার #${latest.orderNumber} (৳${total}) - ${latest.customer?.name || ''}`,
+            type: 'success'
+          });
+
+          setOrders((prev) => {
+            const map = new Map<string, Order>();
+            cloudOrders.forEach((o) => map.set(o.orderId || o.orderNumber, o));
+            prev.forEach((o) => map.set(o.orderId || o.orderNumber, o));
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+          });
+        }
+      }
+
+      cloudOrders.forEach((o) => {
+        if (o.orderId) knownOrderIdsRef.current.add(o.orderId);
+        if (o.orderNumber) knownOrderIdsRef.current.add(o.orderNumber);
+      });
+      initialOrdersLoadedRef.current = true;
+    });
+
+    // 2. 8-second live polling backup for new customer orders
     const interval = setInterval(async () => {
       try {
         const res = await fetch('/api/orders', {
@@ -617,22 +702,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (!Array.isArray(freshOrders)) return;
 
         if (initialOrdersLoadedRef.current && knownOrderIdsRef.current.size > 0) {
-          const brandNew = freshOrders.filter((o) => !knownOrderIdsRef.current.has(o.orderId));
+          const brandNew = freshOrders.filter(
+            (o) => !knownOrderIdsRef.current.has(o.orderId) && !knownOrderIdsRef.current.has(o.orderNumber)
+          );
           if (brandNew.length > 0) {
             const latest = brandNew[0];
             const count = latest.items?.length || 1;
             const total = latest.total ?? latest.subtotal ?? 0;
 
-            // Trigger sound, vibration, and push alert
             playOrderSound();
             triggerHapticFeedback();
             await showNativeAdminNotification(
               '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
-              `অর্ডার #${latest.orderNumber} | মোট: ৳${total} | ${count}টি পণ্য`
+              `অর্ডার #${latest.orderNumber} | মোট: ৳${total} | ${count}টি পণ্য (${latest.customer?.name || ''})`
             );
 
             setNotificationMsg({
-              text: `🛒 নতুন অর্ডার গ্রহণ করা হয়েছে! অর্ডার #${latest.orderNumber} (৳${total})`,
+              text: `🛒 নতুন অর্ডার গ্রহণ করা হয়েছে! অর্ডার #${latest.orderNumber} (৳${total}) - ${latest.customer?.name || ''}`,
               type: 'success'
             });
 
@@ -642,13 +728,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           initialOrdersLoadedRef.current = true;
         }
 
-        freshOrders.forEach((o) => knownOrderIdsRef.current.add(o.orderId));
+        freshOrders.forEach((o) => {
+          if (o.orderId) knownOrderIdsRef.current.add(o.orderId);
+          if (o.orderNumber) knownOrderIdsRef.current.add(o.orderNumber);
+        });
       } catch {
         // Silent catch for background poll
       }
     }, 8000);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsubCloudOrders();
+      clearInterval(interval);
+    };
   }, [token]);
 
   // Handle Add to Blacklist
@@ -3884,14 +3976,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </button>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => setShowVapidModal(true)}
-                        className="px-3.5 py-2.5 bg-emerald-800/80 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-500/40 transition-all cursor-pointer shadow-xs"
-                      >
+                      <div className="px-3.5 py-2.5 bg-emerald-800/80 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-500/40 shadow-xs">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-                        <span>ক্লাউড পুশ সিস্টেম (স্বয়ংক্রিয় সক্রিয় ✓)</span>
-                      </button>
+                        <span>সার্বক্ষণিক ক্লাউড অ্যালার্ট সক্রিয় ✓</span>
+                      </div>
                     </div>
                   </div>
 
@@ -3926,6 +4014,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         নেটওয়ার্ক বা নোটিফিকেশন সার্ভিস ফেইল করলেও কাস্টমারের অর্ডার নিশ্চিতভাবে সার্ভার ও ফায়ারবেসে সফলভাবে জমা হবে।
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                {/* 📱 24/7 MOBILE BACKGROUND NOTIFICATION CHANNEL (TELEGRAM & PWA) */}
+                <div className="bg-gradient-to-br from-[#0c281e] via-[#133E2B] to-[#1a4a35] text-white p-5 sm:p-6 rounded-3xl shadow-xl border-2 border-[#E8C547]/40 space-y-5 animate-in fade-in">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/15 pb-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-[#E8C547] text-gray-950 flex items-center justify-center shrink-0 shadow-md">
+                        <Send className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-extrabold text-base sm:text-lg text-white">
+                            সার্বক্ষণিক মোবাইল পুশ নোটিফিকেশন (ওয়েবসাইট বন্ধ থাকলেও অ্যালার্ট)
+                          </h3>
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            settingsForm.telegramBotToken && settingsForm.telegramChatId
+                              ? 'bg-emerald-400/20 text-emerald-200 border-emerald-400/40'
+                              : 'bg-amber-400/20 text-amber-200 border-amber-400/40'
+                          }`}>
+                            {settingsForm.telegramBotToken && settingsForm.telegramChatId ? '● টেলিগ্রাম চ্যানেল সংযুক্ত' : '○ কনফিগার করুন'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed">
+                          আপনি ওয়েবসাইটে না থাকলেও, ফোন লক বা স্ক্রিন অফ থাকলেও কাস্টমার অন্য যেকোনো ডিভাইস থেকে অর্ডার করলেই আপনার ফোনে ১০০% নিশ্চিতভাবে অ্যালার্ট ও রিংটোন বেজে উঠবে।
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleTestTelegram}
+                        disabled={testingTelegram}
+                        className="px-4 py-2 bg-[#E8C547] hover:bg-[#d8b537] text-gray-900 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                      >
+                        {testingTelegram ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>পাঠানো হচ্ছে...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>টেলিগ্রামে টেস্ট পাঠান</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Feedback Message */}
+                  {telegramTestMsg && (
+                    <div className={`p-3 rounded-2xl text-xs font-bold border flex items-center justify-between ${
+                      telegramTestMsg.ok 
+                        ? 'bg-emerald-950/80 border-emerald-400/50 text-emerald-200' 
+                        : 'bg-red-950/80 border-red-400/50 text-red-200'
+                    }`}>
+                      <span>{telegramTestMsg.text}</span>
+                      <button type="button" onClick={() => setTelegramTestMsg(null)} className="p-1 hover:bg-white/10 rounded cursor-pointer">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Config Inputs */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-emerald-200">
+                        টেলিগ্রাম বট টোকেন (Telegram Bot Token):
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.telegramBotToken || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, telegramBotToken: e.target.value.trim() })}
+                        placeholder="e.g. 7123456789:AAHk..."
+                        className="w-full px-3.5 py-2.5 bg-black/30 border border-emerald-500/40 rounded-xl text-white font-mono text-xs focus:ring-2 focus:ring-[#E8C547] focus:outline-none"
+                      />
+                      <p className="text-[10px] text-emerald-200/70">
+                        টেলিগ্রামে @BotFather এ /newbot লিখে ৩০ সেকেন্ডে তৈরি করা যায়।
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-bold text-emerald-200">
+                        আপনার টেলিগ্রাম চ্যাট আইডি (Chat ID):
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.telegramChatId || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, telegramChatId: e.target.value.trim() })}
+                        placeholder="e.g. 123456789"
+                        className="w-full px-3.5 py-2.5 bg-black/30 border border-emerald-500/40 rounded-xl text-white font-mono text-xs focus:ring-2 focus:ring-[#E8C547] focus:outline-none"
+                      />
+                      <p className="text-[10px] text-emerald-200/70">
+                        টেলিগ্রামে @userinfobot এ /start পাঠালে আপনার নিজস্ব আইডি পেয়ে যাবেন।
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Simple Setup Instructions Guide */}
+                  <div className="bg-black/25 p-4 rounded-2xl border border-white/10 space-y-2 text-xs">
+                    <div className="font-extrabold text-[#E8C547] flex items-center gap-1.5 text-xs">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>১ মিনিটে সার্বক্ষণিক টেলিগ্রাম পুশ অ্যালার্ট চালু করার নিয়ম:</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1 text-[11px] text-emerald-100/90 leading-relaxed">
+                      <li>আপনার ফোনের Telegram অ্যাপে গিয়ে সার্চ করুন <b>@BotFather</b> এবং <code>/newbot</code> লিখে আপনার স্টোরের একটি বট তৈরি করে টোকেনটি উপরের ঘরে দিন।</li>
+                      <li>এরপর Telegram-এ <b>@userinfobot</b> এ <code>/start</code> দিন এবং আপনার প্রাপ্ত <b>Id</b> সংখ্যাটি চ্যাট আইডি ঘরে দিন।</li>
+                      <li>আপনার তৈরি করা বটে ঢুকে <b>Start</b> চাপুন এবং এখানে <b>'সেটিংস সংরক্ষণ করুন'</b> দিয়ে <b>'টেলিগ্রামে টেস্ট পাঠান'</b> বাটনে ক্লিক করুন!</li>
+                    </ol>
                   </div>
                 </div>
 
@@ -5581,82 +5780,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* VAPID Public Key Config Modal */}
-      {showVapidModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E2D8] shadow-2xl p-6 space-y-4 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-[#133E2B]">
-                    পুশ নোটিফিকেশন কনফিগারেশন স্ট্যাটাস
-                  </h4>
-                  <p className="text-[11px] text-emerald-700 font-semibold">
-                    স্বয়ংক্রিয় ক্লাউড কী সক্রিয় রয়েছে ✓
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowVapidModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-2">
-                <p className="font-bold flex items-center gap-1.5 text-emerald-950">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                  <span>কোনো ম্যানুয়াল কী টাইপ করার প্রয়োজন নেই!</span>
-                </p>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  আপনার স্টোরের নতুন অর্ডার অ্যালার্ট এবং রিংটোন নোটিফিকেশন স্থায়ীভাবে স্বয়ংক্রিয় ক্লাউড কী দিয়ে পুরোপুরি কনফিগার করা আছে। কোনো কাস্টমার অর্ডার করার সাথে সাথেই আপনার ফোনে রিংটোন বাজবে ও অ্যালার্ট আসবে।
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  বর্তমান সক্রিয় VAPID Public Key:
-                </label>
-                <div className="w-full p-2.5 text-[11px] font-mono bg-gray-50 border border-gray-200 rounded-xl text-gray-700 break-all select-all">
-                  {customVapidKey || VAPID_PUBLIC_KEY}
-                </div>
-                <p className="text-[10px] text-gray-500 mt-1">
-                  সিস্টেম ব্যাকগ্রাউন্ড পুশ ও ব্রাউজার নোটিফিকেশনের জন্য এটি কার্যকরভাবে সংযুক্ত।
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 pt-3 border-t border-[#E8E2D8]">
-              <button
-                type="button"
-                onClick={() => {
-                  playOrderSound();
-                  triggerHapticFeedback();
-                  showNativeAdminNotification('🔔 টেস্ট নোটিফিকেশন সফল', 'আপনার ফোনে সাউন্ড ও নোটিফিকেশন পুরোপুরি সচল আছে!');
-                }}
-                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-                <span>টেস্ট সাউন্ড বাজান</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowVapidModal(false)}
-                className="px-5 py-2 bg-[#133E2B] text-white text-xs font-bold rounded-xl hover:bg-[#2D6A4F] shadow-sm cursor-pointer"
-              >
-                ঠিক আছে (বন্ধ করুন)
-              </button>
-            </div>
           </div>
         </div>
       )}

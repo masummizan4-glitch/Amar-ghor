@@ -6,7 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
-import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore } from './src/lib/firestoreSync.ts';
+import { loadFromFirestore, syncToFirestore, saveImageToFirestore, loadImageFromFirestore, saveSingleOrderToFirestore } from './src/lib/firestoreSync.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -490,6 +490,44 @@ async function writeDB(data: any) {
   }, 4000);
 }
 
+async function syncFirestoreToMemory() {
+  try {
+    const cloudData = await loadFromFirestore();
+    if (!cloudData) return;
+    const db = await readDB();
+
+    // 1. Merge all orders from Cloud Firestore
+    if (Array.isArray(cloudData.orders) && cloudData.orders.length > 0) {
+      const orderMap = new Map();
+      cloudData.orders.forEach((o: any) => {
+        if (o && (o.orderId || o.orderNumber)) {
+          orderMap.set(o.orderId || o.orderNumber, o);
+        }
+      });
+      (db.orders || []).forEach((o: any) => {
+        if (o && (o.orderId || o.orderNumber)) {
+          orderMap.set(o.orderId || o.orderNumber, o);
+        }
+      });
+      db.orders = Array.from(orderMap.values()).sort(
+        (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+    }
+
+    if (cloudData.settings) {
+      db.settings = { ...db.settings, ...cloudData.settings };
+    }
+    if (Array.isArray(cloudData.blacklist) && cloudData.blacklist.length > 0) {
+      db.blacklist = cloudData.blacklist;
+    }
+
+    memoryCache = db;
+    await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), 'utf-8').catch(() => {});
+  } catch (err: any) {
+    console.warn('[Firestore Sync] Sync notice:', err?.message || err);
+  }
+}
+
 // ----------------- FIREBASE ADMIN PUSH NOTIFICATION DISPATCHER ----------------- //
 let fcmAdminInitialized = false;
 
@@ -586,6 +624,51 @@ async function sendAdminNotification(payload: { title: string; body: string; dat
     }
   } catch (err: any) {
     console.warn('[FCM Admin] Push dispatch note (safely bypassed):', err?.message || err);
+  }
+}
+
+/**
+ * Dispatch External Order Alerts (Telegram Bot Instant Push)
+ * Guaranteed to reach mobile phone even when browser is closed, phone screen is off, or app is terminated!
+ */
+async function dispatchExternalOrderAlerts(order: any, settings: any) {
+  const tgToken = settings?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
+  const tgChat = settings?.telegramChatId || process.env.TELEGRAM_CHAT_ID;
+  if (!tgToken || !tgChat) return;
+
+  try {
+    const itemsList = (order.items || [])
+      .map((i: any) => `• ${i.nameBn || i.nameEn || i.name} (${i.selectedWeight || ''}) x${i.quantity} = ৳${i.total}`)
+      .join('\n');
+    const text = `🛒 *নতুন কাস্টমার অর্ডার এসেছে!* (আমার ঘর Online)\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 *অর্ডার নম্বর:* \`#${order.orderNumber}\`\n` +
+      `👤 *গ্রাহকের নাম:* ${order.customer?.name}\n` +
+      `📞 *মোবাইল:* \`${order.customer?.phone}\`\n` +
+      `📍 *ঠিকানা:* ${order.customer?.address}, ${order.customer?.district}\n` +
+      `💳 *পেমেন্ট পদ্ধতি:* ${String(order.paymentMethod || 'cod').toUpperCase()} | মোট: ৳${order.total}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🛍 *অর্ডারকৃত পণ্যসমূহ:*\n${itemsList}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔗 *ড্যাশবোর্ড:* https://ais-pre-gbnhtenxaui7tam4bmt64b-375809004900.asia-southeast1.run.app/?admin=true`;
+
+    const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: tgChat,
+        text,
+        parse_mode: 'Markdown'
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      console.log(`[Telegram Alert] Sent order #${order.orderNumber} to Telegram chat ${tgChat}`);
+    } else {
+      console.warn('[Telegram Alert] Delivery response:', data.description);
+    }
+  } catch (err: any) {
+    console.warn('[Telegram Alert] Delivery error:', err?.message || err);
   }
 }
 
@@ -1066,8 +1149,11 @@ app.post('/api/orders', async (req, res) => {
     db.orders.unshift(newOrder);
     await writeDB(db);
 
-    // Asynchronously dispatch Admin Push Notification (Non-blocking: safe from failure)
-    setImmediate(() => {
+    // Asynchronously dispatch Admin Push, Firestore Cloud persistence, and Telegram Alerts
+    setImmediate(async () => {
+      saveSingleOrderToFirestore(newOrder).catch((e) => console.warn('Order cloud write note:', e));
+      dispatchExternalOrderAlerts(newOrder, db.settings).catch((e) => console.warn('Telegram alert note:', e));
+
       const count = newOrder.items?.length || 1;
       sendAdminNotification({
         title: '🛒 নতুন অর্ডার গ্রহণ করা হয়েছে!',
@@ -1090,6 +1176,49 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+// Admin Test Telegram Push Endpoint
+app.post('/api/admin/telegram-test', async (req, res) => {
+  try {
+    const adminToken = req.headers['authorization'];
+    if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
+      return res.status(401).json({ error: 'Unauthorized access' });
+    }
+    const { botToken, chatId } = req.body;
+    const db = await readDB();
+    const effectiveToken = (botToken || db.settings?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    const effectiveChat = (chatId || db.settings?.telegramChatId || process.env.TELEGRAM_CHAT_ID || '').trim();
+
+    if (!effectiveToken || !effectiveChat) {
+      return res.status(400).json({ error: 'টেলিগ্রাম বট টোকেন এবং চ্যাট আইডি প্রদান করুন।' });
+    }
+
+    const testText = `🔔 *আমার ঘর অনলাইন - টেস্ট অর্ডার নোটিফিকেশন!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ *অভিনন্দন! আপনার ফোন এখন ১০০% সংযুক্ত!*\n` +
+      `📱 আপনি ওয়েবসাইটে থাকুন বা না থাকুন, স্ক্রিন বন্ধ অথবা লক থাকলেও—যেকোনো মোবাইল বা ল্যাপটপ থেকে কাস্টমার অর্ডার সাবমিট করা মাত্রই আপনার ফোনে রিংটোন বাজবে এবং মেসেজ আসবে।\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏰ টেস্ট সময়: ${new Date().toLocaleTimeString('bn-BD')}`;
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${effectiveToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: effectiveChat,
+        text: testText,
+        parse_mode: 'Markdown'
+      })
+    });
+    const data = await tgRes.json();
+    if (data.ok) {
+      return res.json({ success: true, message: 'আপনার টেলিগ্রামে টেস্ট নোটিফিকেশন সফলভাবে পাঠানো হয়েছে!' });
+    } else {
+      return res.status(400).json({ error: `টেলিগ্রাম ত্রুটি: ${data.description || 'মেসেজ পাঠানো সম্ভব হয়নি'}` });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'টেলিগ্রাম সংযোগ ব্যর্থ হয়েছে' });
+  }
+});
+
 // Admin Get Orders (with automatic risk classification if missing)
 app.get('/api/orders', async (req, res) => {
   try {
@@ -1097,6 +1226,8 @@ app.get('/api/orders', async (req, res) => {
     if (adminToken !== 'Bearer amarghor_secure_admin_session_token') {
       return res.status(401).json({ error: 'Unauthorized access to customer orders' });
     }
+    // Always sync with Cloud Firestore so orders placed from ANY device appear immediately!
+    await syncFirestoreToMemory().catch(() => {});
     const db = await readDB();
     const orders = (db.orders || []).map((o: any) => {
       if (!o.riskLevel) {
@@ -1913,6 +2044,7 @@ async function startServer() {
   // Bind port immediately so Cloud Run health check passes instantly without waiting for Vite
   const server = httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Amar Ghor Online server running in ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'} mode at http://0.0.0.0:${PORT}`);
+    syncFirestoreToMemory().catch(() => {});
   });
 
   server.on('error', (err: any) => {

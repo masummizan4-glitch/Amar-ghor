@@ -62,8 +62,21 @@
     <!-- Single Canonical Web App Manifest -->
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Instant Service Worker Registration for Android WebAPK Generation -->
+    <!-- Immediate PWA Prompt Capture & Service Worker Registration -->
     <script>
+      window.__pwaDeferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__pwaDeferredPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-deferred-prompt-ready'));
+        console.log('[PWA] Captured beforeinstallprompt event for 1-tap install');
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__pwaDeferredPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed-success'));
+        console.log('[PWA] App installed successfully on device');
+      });
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })

@@ -479,6 +479,185 @@
   ],
   "orders": [
     {
+      "subtotal": 1300,
+      "items": [
+        {
+          "image": "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006036/1790695244373.png",
+          "nameBn": "প্রিমিয়াম হানি নাটস",
+          "total": 1300,
+          "price": 1300,
+          "id": "prod-2",
+          "unitBn": "প্রতি কেজি",
+          "quantity": 1,
+          "nameEn": "Premium Honey Nuts",
+          "selectedWeight": "1kg",
+          "unit": "Per kg"
+        }
+      ],
+      "customer": {
+        "email": "",
+        "name": "Jannat",
+        "phone": "01742749028",
+        "notes": "",
+        "district": "ব্রাহ্মণবাড়িয়া (Brahmanbaria)",
+        "address": "Gabbari,kasba"
+      },
+      "orderNumber": "AGO-2026-726727",
+      "total": 1440,
+      "orderId": "ord-1793039332751",
+      "createdAt": "2026-10-26T18:28:52.751Z",
+      "paymentMethod": "cod",
+      "paymentStatus": "unpaid",
+      "source": "web_client",
+      "status": "pending",
+      "transactionId": "",
+      "deliveryCharge": 140
+    },
+    {
+      "total": 1065,
+      "createdAt": "2026-10-26T18:25:44.889Z",
+      "items": [
+        {
+          "quantity": 1,
+          "nameEn": "Natural Power Mix ",
+          "selectedWeight": "450g",
+          "nameBn": "ন্যাচারাল পাওয়ার মিক্স",
+          "unitBn": "৪৫০ গ্রাম কৌটা (প্রতি কেজি ২১০০৳ ভিত্তিতে)",
+          "price": 945,
+          "total": 945,
+          "unit": "Per kg",
+          "image": "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005839/IMG-20261014-WA0014.jpg",
+          "id": "prod-1792166438801"
+        }
+      ],
+      "source": "web_client",
+      "paymentMethod": "cod",
+      "paymentStatus": "unpaid",
+      "orderNumber": "AGO-2026-412615",
+      "customer": {
+        "district": "চট্টগ্রাম (Chattogram)",
+        "notes": "",
+        "phone": "01823240230",
+        "name": "Jannat",
+        "address": "Bibirhat,Fotikchari",
+        "email": ""
+      },
+      "orderId": "ord-1793039144889",
+      "status": "delivered",
+      "subtotal": 945,
+      "deliveryCharge": 120,
+      "transactionId": "",
+      "updatedAt": "2026-10-27T03:11:54.772Z"
+    },
+    {
+      "source": "web_client",
+      "orderNumber": "AGO-2026-960575",
+      "deliveryCharge": 140,
+      "updatedAt": "2026-10-27T03:12:03.942Z",
+      "transactionId": "",
+      "paymentMethod": "cod",
+      "paymentStatus": "unpaid",
+      "items": [
+        {
+          "quantity": 1,
+          "id": "prod-5",
+          "unit": "Per kg",
+          "image": "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792004716/1791915794571.jpg",
+          "selectedWeight": "1kg",
+          "price": 1800,
+          "total": 1800,
+          "nameBn": "খাঁটি দানাদার সরের ঘি",
+          "unitBn": "প্রতি কেজি",
+          "nameEn": "Pure Granular Cream Ghee"
+        }
+      ],
+      "orderId": "ord-1793034196158",
+      "total": 1940,
+      "createdAt": "2026-10-26T17:03:16.160Z",
+      "status": "delivered",
+      "customer": {
+        "district": "চট্টগ্রাম (Chattogram)",
+        "address": "Bibirhat,fotikchori",
+        "notes": "",
+        "phone": "01823240230",
+        "email": "",
+        "name": "Ahmadullah"
+      },
+      "subtotal": 1800
+    },
+    {
+      "deliveryCharge": 140,
+      "subtotal": 1300,
+      "customer": {
+        "notes": "",
+        "phone": "01892240230",
+        "address": "Bibirhat,Fotikchari",
+        "district": "চট্টগ্রাম (Chattogram)",
+        "name": "Ahmadullah huzaifa",
+        "email": ""
+      },
+      "orderId": "ord-1792935482560",
+      "transactionId": "",
+      "source": "web_client",
+      "createdAt": "2026-10-25T13:38:02.560Z",
+      "status": "delivered",
+      "items": [
+        {
+          "id": "prod-2",
+          "image": "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792006036/1790695244373.png",
+          "nameEn": "Premium Honey Nuts",
+          "total": 1300,
+          "price": 1300,
+          "unitBn": "প্রতি কেজি",
+          "nameBn": "প্রিমিয়াম হানি নাটস",
+          "unit": "Per kg",
+          "selectedWeight": "1kg",
+          "quantity": 1
+        }
+      ],
+      "orderNumber": "AGO-2026-482580",
+      "updatedAt": "2026-10-25T13:40:01.782Z",
+      "paymentStatus": "unpaid",
+      "paymentMethod": "cod",
+      "total": 1440
+    },
+    {
+      "updatedAt": "2026-10-25T09:01:41.691Z",
+      "deliveryCharge": 140,
+      "transactionId": "",
+      "status": "delivered",
+      "orderId": "ord-1792918751313",
+      "source": "web_client",
+      "orderNumber": "AGO-2026-419856",
+      "paymentStatus": "unpaid",
+      "paymentMethod": "cod",
+      "total": 1540,
+      "subtotal": 1400,
+      "createdAt": "2026-10-25T08:59:11.314Z",
+      "customer": {
+        "phone": "01844528056",
+        "email": "",
+        "district": "ফরিদপুর (Faridpur)",
+        "name": "Masum",
+        "address": "gabbari,kasba",
+        "notes": ""
+      },
+      "items": [
+        {
+          "selectedWeight": "1kg",
+          "nameEn": "Natural Honeycomb Honey",
+          "unit": "Per kg",
+          "nameBn": "প্রাকৃতিক চাক ভাঙ্গা মধু",
+          "id": "prod-1",
+          "unitBn": "প্রতি কেজি",
+          "quantity": 1,
+          "image": "https://res.cloudinary.com/hcmtg1sc/image/upload/v1792005716/ChatGPT_Image_Sep_29_2026_09_43_29_PM.png",
+          "total": 1400,
+          "price": 1400
+        }
+      ]
+    },
+    {
       "orderId": "ord-1792918478230",
       "orderNumber": "AGO-2026-715453",
       "createdAt": "2026-10-25T08:54:38.230Z",
@@ -763,32 +942,32 @@
     "trustCard2TitleEn": "Reliable Countrywide Delivery",
     "enableFakeDetection": true,
     "paymentMethods": {
+      "bkash": true,
       "nagadNumber": "01742749028 (Personal/Send Money)",
-      "bkashNumber": "01742749028 (Personal/Send Money)",
       "nagad": true,
-      "cod": true,
-      "bkash": true
+      "bkashNumber": "01742749028 (Personal/Send Money)",
+      "cod": true
     },
     "aboutBn": "আমার ঘর Online-এ আপনাকে স্বাগতম। আমাদের লক্ষ্য হলো আপনার ঘরের জন্য বাছাইকৃত খাবার ও সৌন্দর্যবর্ধক পণ্য একটি সহজ, সুন্দর ও নির্ভরযোগ্য অনলাইন অভিজ্ঞতার মাধ্যমে পৌঁছে দেওয়ার ব্যবস্থা করা। পণ্যের সঠিক তথ্য, স্বচ্ছ মূল্য এবং আন্তরিক গ্রাহকসেবাকে আমরা গুরুত্ব দিই।",
     "deliveryBase1KgRate": 140,
     "heroBadgeBn": "আমার ঘর Online · বিশ্বস্ততার প্রতীক",
     "trustCard1DescBn": "পরিবারের প্রতিটি সদস্যের স্বাস্থ্যের কথা মাথায় রেখে বাছাইকৃত শতভাগ খাঁটি খাদ্য সম্ভার।",
     "features": {
-      "showAboutSection": true,
-      "showProductWhatsAppBtn": true,
-      "showTrustBanner": true,
-      "showSearchBar": true,
-      "showAnnouncement": true,
-      "showCheckoutEmailField": true,
-      "showLanguageSwitcher": true,
-      "showContactSection": true,
-      "showCategoryBar": true,
-      "showHeroSection": true,
-      "enableOrderNotes": true,
-      "showStockBadge": true,
       "showFontSwitcher": true,
+      "enableOrderNotes": true,
+      "showCheckoutEmailField": true,
+      "showContactSection": true,
+      "showHeroSection": true,
+      "showProductWhatsAppBtn": true,
+      "showAboutSection": true,
+      "showAnnouncement": true,
+      "showTrustBanner": true,
+      "showCategoryBar": true,
+      "showSearchBar": true,
+      "showHomeDecorSection": true,
       "showFloatingWhatsApp": true,
-      "showHomeDecorSection": true
+      "showLanguageSwitcher": true,
+      "showStockBadge": true
     },
     "taglineEn": "Trusted Products for Your Home",
     "termsBn": "পণ্য গ্রহণের সময় অনুগ্রহ করে ডেলিভারি ম্যানের উপস্থিতিতে পণ্য দেখে নিন। কোনো ত্রুটি পরিলক্ষিত হলে সাথে সাথেই আমাদের জানান।",
@@ -880,5 +1059,6 @@
       "createdAt": "2026-09-28T16:10:00.000Z",
       "approved": true
     }
-  ]
+  ],
+  "adminFcmTokens": []
 }

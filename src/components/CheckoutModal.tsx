@@ -309,18 +309,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           transactionId,
           paymentStatus: paymentMethod === 'cod' ? 'unpaid' : 'pending_verification'
         };
+      }
 
-        // Non-blocking background sync to Cloud Firestore
+      if (createdOrderObj) {
+        // Always push to Cloud Firestore immediately so all admin devices receive real-time push alert
         saveOrderToCloud(createdOrderObj).catch((e) => console.warn('Cloud order write note:', e));
 
         // Also cache in customer's local storage immediately
         try {
           const savedOrders = JSON.parse(localStorage.getItem('amarghor_orders') || '[]');
-          localStorage.setItem('amarghor_orders', JSON.stringify([createdOrderObj, ...savedOrders]));
+          const filtered = savedOrders.filter(
+            (o: any) => o.orderId !== createdOrderObj!.orderId && o.orderNumber !== createdOrderObj!.orderNumber
+          );
+          localStorage.setItem('amarghor_orders', JSON.stringify([createdOrderObj, ...filtered]));
         } catch {}
-      }
 
-      if (createdOrderObj) {
         setCreatedOrder(createdOrderObj);
         onOrderSuccess(createdOrderObj);
       }

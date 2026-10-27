@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Product, SiteSettings, Order, ContactMessage, BlacklistEntry, CustomerReview, ScreenshotReview } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -292,7 +292,7 @@ export async function verifyAdminPasswordInCloud(password: string): Promise<bool
 }
 
 /**
- * Load orders from Cloud Firestore
+ * Load orders from Cloud Firestore (merges all sources)
  */
 export async function loadOrdersFromCloud(): Promise<Order[]> {
   if (isClientQuotaExceeded()) return [];
@@ -301,30 +301,81 @@ export async function loadOrdersFromCloud(): Promise<Order[]> {
 
   try {
     const storeRef = doc(db, 'app_store', 'orders');
-    const snap = await withTimeout(getDoc(storeRef), 2500, null as any);
+    const colRef = collection(db, 'orders');
+
+    const [snap, colSnap] = await Promise.all([
+      withTimeout(getDoc(storeRef), 2500, null as any),
+      withTimeout(getDocs(colRef), 2500, null as any)
+    ]);
+
+    const orderMap = new Map<string, Order>();
+
     if (snap && snap.exists && snap.exists()) {
       const items = snap.data()?.items;
-      if (Array.isArray(items) && items.length > 0) {
-        return items as Order[];
+      if (Array.isArray(items)) {
+        items.forEach((o: any) => {
+          if (o && (o.orderId || o.orderNumber)) {
+            orderMap.set(o.orderId || o.orderNumber, o);
+          }
+        });
       }
     }
 
-    // Also check dedicated collection 'orders'
-    const colRef = collection(db, 'orders');
-    const colSnap = await withTimeout(getDocs(colRef), 2500, null as any);
     if (colSnap && !colSnap.empty) {
-      const list: Order[] = [];
       colSnap.forEach((d: any) => {
-        list.push(d.data() as Order);
+        const o = d.data();
+        if (o && (o.orderId || o.orderNumber)) {
+          orderMap.set(o.orderId || o.orderNumber, o);
+        }
       });
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      return list;
     }
 
-    return [];
+    const list = Array.from(orderMap.values());
+    list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    return list;
   } catch (err: any) {
     handleClientFirestoreError(err, 'loadOrdersFromCloud');
     return [];
+  }
+}
+
+/**
+ * Real-time listener for orders from Cloud Firestore using onSnapshot.
+ * Triggers live alerts instantly whenever ANY customer orders worldwide!
+ */
+export function listenToCloudOrders(
+  onOrdersUpdate: (orders: Order[], isInitial: boolean) => void
+): () => void {
+  const db = getClientFirestoreDb();
+  if (!db || isClientQuotaExceeded()) {
+    return () => {};
+  }
+
+  try {
+    const colRef = collection(db, 'orders');
+    let isInitial = true;
+    const unsub = onSnapshot(
+      colRef,
+      (snapshot) => {
+        const orderList: Order[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as Order;
+          if (data && (data.orderId || data.orderNumber)) {
+            orderList.push(data);
+          }
+        });
+        orderList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        onOrdersUpdate(orderList, isInitial);
+        isInitial = false;
+      },
+      (err) => {
+        console.warn('[Firestore] Live orders subscription notice:', err?.message || err);
+      }
+    );
+    return unsub;
+  } catch (err) {
+    console.warn('[Firestore] Error attaching real-time order listener:', err);
+    return () => {};
   }
 }
 

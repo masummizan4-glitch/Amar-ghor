@@ -33,7 +33,8 @@ import {
   loadReviewsFromCloud, 
   saveReviewToCloud, 
   loadScreenshotReviewsFromCloud,
-  saveScreenshotReviewsToCloud
+  saveScreenshotReviewsToCloud,
+  listenToCloudOrders
 } from './lib/clientFirebase';
 
 const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -299,6 +300,32 @@ export default function App() {
     let lastKnownOrdersCount = 0;
     const knownIds = new Set<string>();
 
+    // 1. Live Firestore WebSocket Listener in App
+    const unsubCloud = listenToCloudOrders((cloudOrders, isInitial) => {
+      const adminToken = localStorage.getItem('amarghor_admin_token');
+      const notifEnabled = localStorage.getItem('amarghor_admin_notifications_enabled') !== 'false';
+      if (!adminToken || !notifEnabled || !cloudOrders) return;
+
+      if (!isInitial && knownIds.size > 0) {
+        const freshOnes = cloudOrders.filter(
+          (o) => !knownIds.has(o.orderId) && !knownIds.has(o.orderNumber)
+        );
+        if (freshOnes.length > 0) {
+          const latest = freshOnes[0];
+          playOrderSound();
+          triggerHapticFeedback();
+          showNativeAdminNotification(
+            '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
+            `অর্ডার #${latest.orderNumber || ''} | মোট: ৳${latest.total ?? (latest as any).totalPayable ?? latest.subtotal ?? ''} (${latest.customer?.name || ''})`
+          );
+        }
+      }
+      cloudOrders.forEach((o: any) => {
+        if (o.orderId) knownIds.add(o.orderId);
+        if (o.orderNumber) knownIds.add(o.orderNumber);
+      });
+    });
+
     const checkAdminOrders = async () => {
       try {
         const adminToken = localStorage.getItem('amarghor_admin_token');
@@ -312,33 +339,37 @@ export default function App() {
         const orders = await res.json();
         if (Array.isArray(orders)) {
           if (lastKnownOrdersCount > 0 && orders.length > lastKnownOrdersCount) {
-            const freshOnes = orders.filter((o: any) => !knownIds.has(o.orderId));
+            const freshOnes = orders.filter((o: any) => !knownIds.has(o.orderId) && !knownIds.has(o.orderNumber));
             if (freshOnes.length > 0) {
               const latest = freshOnes[0];
               playOrderSound();
               triggerHapticFeedback();
               showNativeAdminNotification(
                 '🛒 নতুন কাস্টমার অর্ডার এসেছে!',
-                `অর্ডার #${latest.orderNumber || ''} | মোট: ৳${latest.totalPayable || latest.payableTotal || latest.subtotal || ''}`
+                `অর্ডার #${latest.orderNumber || ''} | মোট: ৳${latest.total || latest.totalPayable || latest.payableTotal || latest.subtotal || ''} (${latest.customer?.name || ''})`
               );
             }
           }
           lastKnownOrdersCount = orders.length;
-          orders.forEach((o: any) => knownIds.add(o.orderId));
+          orders.forEach((o: any) => {
+            if (o.orderId) knownIds.add(o.orderId);
+            if (o.orderNumber) knownIds.add(o.orderNumber);
+          });
         }
       } catch {
         // Silent catch for background check
       }
     };
 
-    // First check after 3 seconds, then every 10 seconds
-    const initialTimer = setTimeout(checkAdminOrders, 3000);
+    // First check after 2 seconds, then every 10 seconds
+    const initialTimer = setTimeout(checkAdminOrders, 2000);
     const interval = setInterval(() => {
       if (isMounted) checkAdminOrders();
     }, 10000);
 
     return () => {
       isMounted = false;
+      unsubCloud();
       clearTimeout(initialTimer);
       clearInterval(interval);
     };

@@ -6,10 +6,16 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => {
+    if (typeof window !== 'undefined' && (window as any).__pwaDeferredPrompt) {
+      return (window as any).__pwaDeferredPrompt;
+    }
+    return null;
+  });
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
 
   useEffect(() => {
     // Detect standalone mode (already running as installed app on home screen)
@@ -23,40 +29,68 @@ export function usePWAInstall() {
     const isIOSDevice = /iphone|ipad|ipod/.test(userAgent) && !(window as any).MSStream;
     setIsIOS(isIOSDevice);
 
-    // Detect whether page is running inside Google AI Studio preview iframe
+    // Detect in-app browsers (Facebook, Instagram, Messenger, WeChat, Line)
+    const inApp = /fban|fbav|instagram|messenger|line|micromessenger|wechat/i.test(userAgent);
+    setIsInAppBrowser(inApp);
+
+    // Detect whether page is running inside an iframe
     try {
       setIsInIframe(window.self !== window.top);
     } catch {
       setIsInIframe(true);
     }
 
+    // Sync from global window object if already captured before React mount
+    if ((window as any).__pwaDeferredPrompt) {
+      setDeferredPrompt((window as any).__pwaDeferredPrompt);
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      const promptEvent = e as BeforeInstallPromptEvent;
+      (window as any).__pwaDeferredPrompt = promptEvent;
+      setDeferredPrompt(promptEvent);
+    };
+
+    const handlePromptReady = () => {
+      if ((window as any).__pwaDeferredPrompt) {
+        setDeferredPrompt((window as any).__pwaDeferredPrompt);
+      }
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      if (typeof window !== 'undefined') {
+        (window as any).__pwaDeferredPrompt = null;
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('pwa-deferred-prompt-ready', handlePromptReady);
+    window.addEventListener('pwa-installed-success', handleAppInstalled);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('pwa-deferred-prompt-ready', handlePromptReady);
+      window.removeEventListener('pwa-installed-success', handleAppInstalled);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
   const install = async (): Promise<boolean> => {
-    if (!deferredPrompt) return false;
+    const promptEvent = deferredPrompt || (typeof window !== 'undefined' ? (window as any).__pwaDeferredPrompt : null);
+    if (!promptEvent) return false;
     try {
-      await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+      await promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
       if (outcome === 'accepted') {
         setIsInstalled(true);
         setDeferredPrompt(null);
+        if (typeof window !== 'undefined') {
+          (window as any).__pwaDeferredPrompt = null;
+        }
         return true;
       }
     } catch (err) {
@@ -65,11 +99,14 @@ export function usePWAInstall() {
     return false;
   };
 
+  const hasPrompt = !!deferredPrompt || (typeof window !== 'undefined' && !!(window as any).__pwaDeferredPrompt);
+
   return {
-    isInstallable: !!deferredPrompt,
+    isInstallable: hasPrompt,
     isInstalled,
     isIOS,
     isInIframe,
+    isInAppBrowser,
     install,
   };
 }

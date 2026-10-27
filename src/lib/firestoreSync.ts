@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
 
@@ -133,23 +133,47 @@ export async function loadFromFirestore(): Promise<any | null> {
     const ordersRef = doc(db, 'app_store', 'orders');
     const settingsRef = doc(db, 'app_store', 'settings');
     const securityRef = doc(db, 'app_store', 'security');
+    const colOrdersRef = collection(db, 'orders');
 
-    const [prodSnap, ordersSnap, settingsSnap, secSnap] = await Promise.all([
-      getDoc(prodRef),
-      getDoc(ordersRef),
-      getDoc(settingsRef),
-      getDoc(securityRef)
+    const [prodSnap, ordersSnap, settingsSnap, secSnap, colOrdersSnap] = await Promise.all([
+      getDoc(prodRef).catch(() => null),
+      getDoc(ordersRef).catch(() => null),
+      getDoc(settingsRef).catch(() => null),
+      getDoc(securityRef).catch(() => null),
+      getDocs(colOrdersRef).catch(() => null)
     ]);
 
-    if (!prodSnap.exists() && !ordersSnap.exists()) {
+    const hasAny = (prodSnap && prodSnap.exists()) || (ordersSnap && ordersSnap.exists()) || (colOrdersSnap && !colOrdersSnap.empty);
+    if (!hasAny) {
       console.log('[Firestore] Cloud database is empty, needs initial seeding.');
       return null;
     }
 
-    const products = prodSnap.exists() ? prodSnap.data()?.items || [] : [];
-    const orders = ordersSnap.exists() ? ordersSnap.data()?.items || [] : [];
-    const settings = settingsSnap.exists() ? settingsSnap.data()?.data || null : null;
-    const secData = secSnap.exists() ? secSnap.data() : {};
+    const products = prodSnap && prodSnap.exists() ? prodSnap.data()?.items || [] : [];
+    
+    // Merge orders from app_store/orders AND collection('orders')
+    const orderMap = new Map<string, any>();
+    if (ordersSnap && ordersSnap.exists()) {
+      (ordersSnap.data()?.items || []).forEach((o: any) => {
+        if (o && (o.orderId || o.orderNumber)) {
+          orderMap.set(o.orderId || o.orderNumber, o);
+        }
+      });
+    }
+    if (colOrdersSnap && !colOrdersSnap.empty) {
+      colOrdersSnap.forEach((d: any) => {
+        const o = d.data();
+        if (o && (o.orderId || o.orderNumber)) {
+          orderMap.set(o.orderId || o.orderNumber, o);
+        }
+      });
+    }
+    const orders = Array.from(orderMap.values()).sort(
+      (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    const settings = settingsSnap && settingsSnap.exists() ? settingsSnap.data()?.data || null : null;
+    const secData = secSnap && secSnap.exists() ? secSnap.data() : {};
 
     return {
       products,
@@ -229,5 +253,47 @@ export async function loadImageFromFirestore(id: string): Promise<{ dataUrl: str
   } catch (err: any) {
     console.error('[Firestore] Failed to load image from cloud:', err?.message || err);
     return null;
+  }
+}
+
+/**
+ * Persist an individual order directly to Cloud Firestore 'orders' collection and update 'app_store/orders'
+ */
+export async function saveSingleOrderToFirestore(order: any): Promise<boolean> {
+  if (isFirestoreQuotaExceeded()) return false;
+  const db = getFirestoreDb();
+  if (!db) return false;
+
+  try {
+    const docId = order.orderId || order.orderNumber || ('ord-' + Date.now());
+    const orderDocRef = doc(db, 'orders', docId);
+    await setDoc(orderDocRef, order, { merge: true });
+
+    // Also update app_store/orders cache
+    const ordersRef = doc(db, 'app_store', 'orders');
+    const snap = await getDoc(ordersRef).catch(() => null);
+    let existingItems: any[] = [];
+    if (snap && snap.exists()) {
+      existingItems = snap.data()?.items || [];
+    }
+    const filtered = existingItems.filter(
+      (o: any) => o.orderId !== order.orderId && o.orderNumber !== order.orderNumber
+    );
+    await setDoc(ordersRef, {
+      items: [order, ...filtered],
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log('[Firestore] Successfully persisted order to cloud:', order.orderNumber || docId);
+    return true;
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (err?.code === 'resource-exhausted' || msg.includes('RESOURCE_EXHAUSTED')) {
+      setFirestoreQuotaExceeded(30 * 60 * 1000);
+      console.warn('[Firestore] Quota reached on order save.');
+    } else {
+      console.warn('[Firestore] Order save note:', msg);
+    }
+    return false;
   }
 }
